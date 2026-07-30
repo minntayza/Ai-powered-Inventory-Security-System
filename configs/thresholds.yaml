@@ -1,0 +1,20 @@
+yolo:
+  model_path: "yolov8n.pt"
+  confidence_threshold: 0.5
+  iou_threshold: 0.45
+  target_classes:
+    - "person"
+    - "bottle"
+    - "backpack"
+
+face_recognition:
+  model_name: "VGG-Face"
+  detector_backend: "opencv"
+  distance_metric: "cosine"
+  recognition_threshold: 0.4
+  anti_spoofing: true
+  db_path: "assets/known_faces"
+
+person_tracking:
+  grace_period_seconds: 3
+  min_face_size: 50

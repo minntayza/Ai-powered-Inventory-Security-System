@@ -1,0 +1,32 @@
+yolo:
+  model_path: "yolov8n.pt"
+  # auto selects cuda:0 when PyTorch can use it, otherwise cpu.
+  device: "auto"
+  image_size: 640
+  confidence_threshold: 0.5
+  iou_threshold: 0.45
+  tracking: true
+  target_classes:
+    - person
+    - bottle
+    - backpack
+    - handbag
+    - cup
+    - chair
+    - tv
+    - laptop
+    - mouse
+    - remote
+    - keyboard
+    - cell phone
+    - book
+    - clock
+    - scissors
+
+vlm:
+  enabled: true
+  model_name: "microsoft/Florence-2-base-ft"
+  # Florence follows the same CUDA/CPU auto-selection and fallback behavior.
+  device: "auto"
+  max_new_tokens: 128
+  trust_remote_code: true

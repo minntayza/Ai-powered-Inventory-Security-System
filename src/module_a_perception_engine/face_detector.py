@@ -56,6 +56,7 @@ class FaceDetector:
                             "bbox": [x, y, w, h],
                             "name": "Spoof",
                             "authorized": False,
+                            "authorization_state": "spoof",
                             "confidence": 0.0,
                             "face_detected": True,
                             "is_real": False
@@ -70,6 +71,7 @@ class FaceDetector:
                         "bbox": [x, y, w, h],
                         "name": name,
                         "authorized": authorized,
+                        "authorization_state": "authorized" if authorized else "unknown",
                         "confidence": confidence,
                         "face_detected": True,
                         "is_real": True
@@ -79,6 +81,10 @@ class FaceDetector:
             print(f"Face detection error: {e}")
 
         return results
+
+    def refresh_database(self) -> None:
+        """Reload enrolled folder names after authorized images are added."""
+        self.known_names = self.face_db.get_known_names()
 
     def _recognize_face(
         self, frame: np.ndarray, x: int, y: int, w: int, h: int

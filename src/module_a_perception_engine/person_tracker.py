@@ -3,6 +3,8 @@
 import cv2
 import numpy as np
 import time
+from concurrent.futures import Future, ThreadPoolExecutor
+from copy import deepcopy
 from typing import Dict, List
 from .yolo_detector import YOLODetector
 from .face_detector import FaceDetector
@@ -15,21 +17,41 @@ class PersonTracker:
     def __init__(
         self,
         grace_period: float = 3.0,
-        face_db_path: str = "assets/known_faces"
+        face_db_path: str = "assets/known_faces",
+        face_interval_frames: int = 5,
+        track_expiry_seconds: float = 5.0,
+        yolo_detector=None,
+        face_detector=None,
+        inventory_counter=None,
     ):
-        self.yolo_detector = YOLODetector()
-        self.face_detector = FaceDetector(db_path=face_db_path)
-        self.inventory_counter = InventoryCounter()
+        self.yolo_detector = yolo_detector or YOLODetector()
+        self.face_detector = face_detector or FaceDetector(db_path=face_db_path)
+        self.inventory_counter = inventory_counter or InventoryCounter()
 
         self.grace_period = grace_period
         self.person_history = {}
         self.next_person_id = 1
+        self.face_interval_frames = max(1, face_interval_frames)
+        self.track_expiry_seconds = track_expiry_seconds
+        self.frame_number = 0
+        self._face_executor = ThreadPoolExecutor(
+            max_workers=1, thread_name_prefix="face-recognition"
+        )
+        self._face_future: Future | None = None
 
     def process_frame(self, frame: np.ndarray) -> Dict:
         yolo_results = self.yolo_detector.detect(frame)
-        inventory_count = self.inventory_counter.update_count(yolo_results)
+        inventory = self.inventory_counter.update(yolo_results)
 
-        face_results = self.face_detector.detect_faces(frame)
+        self.frame_number += 1
+        face_results = self._completed_face_results()
+        if (
+            self._face_future is None
+            and (self.frame_number == 1 or self.frame_number % self.face_interval_frames == 0)
+        ):
+            self._face_future = self._face_executor.submit(
+                self.face_detector.detect_faces, frame.copy()
+            )
 
         persons = self._correlate_persons_faces(
             yolo_results["persons"], face_results
@@ -39,10 +61,30 @@ class PersonTracker:
             "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S"),
             "persons": persons,
             "inventory": {
-                "count": inventory_count,
+                **inventory,
+                "count": inventory["total_stable_count"],
                 "items": yolo_results["inventory"]
-            }
+            },
+            "frame_number": self.frame_number,
+            "frame_size": [int(frame.shape[1]), int(frame.shape[0])],
+            "face_analysis_pending": self._face_future is not None,
         }
+
+    def _completed_face_results(self) -> List[Dict]:
+        if self._face_future is None or not self._face_future.done():
+            return []
+        future, self._face_future = self._face_future, None
+        try:
+            return future.result()
+        except Exception as exc:
+            print(f"Background face detection error: {exc}")
+            return []
+
+    def shutdown(self) -> None:
+        """Stop accepting face-analysis work during application shutdown."""
+        if self._face_future is not None:
+            self._face_future.cancel()
+        self._face_executor.shutdown(wait=False, cancel_futures=True)
 
     def _correlate_persons_faces(
         self,
@@ -50,39 +92,64 @@ class PersonTracker:
         face_results: List[Dict]
     ) -> List[Dict]:
         correlated = []
+        self._expire_tracks()
+        assigned_ids = set()
 
         for person in person_bboxes:
             px1, py1, px2, py2 = person["bbox"]
 
             matched_face = None
-            best_overlap = 0
+            best_score = 0.0
 
             for face in face_results:
                 fx, fy, fw, fh = face["bbox"]
 
-                overlap = self._calculate_overlap(
-                    px1, py1, px2, py2,
-                    fx, fy, fx + fw, fy + fh
-                )
-
-                if overlap > best_overlap:
-                    best_overlap = overlap
+                face_center_x = fx + fw / 2
+                face_center_y = fy + fh / 2
+                inside = px1 <= face_center_x <= px2 and py1 <= face_center_y <= py2
+                score = float(fw * fh) if inside else 0.0
+                if score > best_score:
+                    best_score = score
                     matched_face = face
 
+            model_track_id = person.get("track_id")
+            if model_track_id is not None:
+                person_id = int(model_track_id)
+                self._remember_model_track(person_id, px1, py1, px2, py2)
+            else:
+                person_id = self._get_or_create_person_id(
+                    px1, py1, px2, py2, excluded_ids=assigned_ids
+                )
+            assigned_ids.add(person_id)
             person_data = {
-                "id": self._get_or_create_person_id(px1, py1, px2, py2),
+                "id": person_id,
+                "track_id": person_id,
                 "bbox": person["bbox"],
                 "confidence": person["confidence"]
             }
 
-            if matched_face and best_overlap > 0.3:
+            history = self.person_history[person_id]
+            if matched_face:
                 person_data["name"] = matched_face["name"]
                 person_data["authorized"] = matched_face["authorized"]
                 person_data["face_confidence"] = matched_face["confidence"]
+                person_data["authorization_state"] = matched_face.get(
+                    "authorization_state",
+                    "authorized" if matched_face["authorized"] else "unknown",
+                )
+                history["identity"] = person_data["name"]
+                history["authorization_state"] = person_data["authorization_state"]
+                history["face_confidence"] = person_data["face_confidence"]
+                if person_data["authorized"]:
+                    history["last_authorized"] = time.time()
             else:
-                person_data["name"] = "Unknown"
-                person_data["authorized"] = False
-                person_data["face_confidence"] = 0.0
+                recently_authorized = (
+                    history.get("last_authorized", 0) + self.grace_period >= time.time()
+                )
+                person_data["name"] = history.get("identity", "Unknown") if recently_authorized else "Unknown"
+                person_data["authorized"] = recently_authorized
+                person_data["face_confidence"] = history.get("face_confidence", 0.0) if recently_authorized else 0.0
+                person_data["authorization_state"] = "authorized" if recently_authorized else "not_visible"
 
             correlated.append(person_data)
 
@@ -109,12 +176,16 @@ class PersonTracker:
         return intersection / person_area
 
     def _get_or_create_person_id(
-        self, x1: int, y1: int, x2: int, y2: int
+        self, x1: int, y1: int, x2: int, y2: int,
+        excluded_ids=None,
     ) -> int:
+        excluded_ids = excluded_ids or set()
         center_x = (x1 + x2) // 2
         center_y = (y1 + y2) // 2
 
         for person_id, history in self.person_history.items():
+            if person_id in excluded_ids:
+                continue
             last_pos = history["last_position"]
             distance = ((center_x - last_pos[0]) ** 2 +
                        (center_y - last_pos[1]) ** 2) ** 0.5
@@ -128,10 +199,39 @@ class PersonTracker:
         self.next_person_id += 1
         self.person_history[new_id] = {
             "last_position": (center_x, center_y),
-            "last_seen": time.time()
+            "last_seen": time.time(),
+            "authorization_state": "not_visible",
+            "identity": "Unknown",
+            "face_confidence": 0.0,
+            "last_authorized": 0.0,
         }
 
         return new_id
+
+    def _remember_model_track(self, person_id: int, x1: int, y1: int, x2: int, y2: int) -> None:
+        center = ((x1 + x2) // 2, (y1 + y2) // 2)
+        history = self.person_history.setdefault(
+            person_id,
+            {
+                "authorization_state": "not_visible",
+                "identity": "Unknown",
+                "face_confidence": 0.0,
+                "last_authorized": 0.0,
+            },
+        )
+        history["last_position"] = center
+        history["last_seen"] = time.time()
+        self.next_person_id = max(self.next_person_id, person_id + 1)
+
+    def _expire_tracks(self) -> None:
+        now = time.time()
+        expired = [
+            person_id
+            for person_id, history in self.person_history.items()
+            if now - history["last_seen"] > self.track_expiry_seconds
+        ]
+        for person_id in expired:
+            del self.person_history[person_id]
 
     def draw_tracking(self, frame: np.ndarray, output: Dict) -> np.ndarray:
         frame = frame.copy()

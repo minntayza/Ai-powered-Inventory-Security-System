@@ -32,13 +32,13 @@ src/backend_alerting/
 |---|---|
 | 1 | Create base Python event loop framework, register Telegram bot via BotFather, test text delivery |
 | 2 | Code automated theft detection logic, connect MP3 siren trigger |
-| 3 | Link YOLO/ArUco states to event engine, ensure correct state change tracking |
+| 3 | Link YOLO + face recognition states to event engine, ensure correct state change tracking |
 | 4 | Test Telegram payload: verify photo + alert sent to admin during breach |
 | 5 | Finalize comprehensive audit trail (CSV/DB), ensure all events are timestamped and logged |
 
 ## Notes
 
-- Theft condition: inventory count drops AND no ArUco badge detected on nearby person
-- Grace buffer: 3-second window to re-detect badge before confirming theft (prevents false alarms)
+- Theft condition: inventory count drops AND no recognized face detected on nearby person
+- Grace buffer: 3-second window to re-detect face before confirming theft (prevents false alarms)
 - Telegram payload must include a photo of the incident frame + text alert
 - Siren must coordinate with `src/utils/audio_control.py` to mute mic during playback

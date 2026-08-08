@@ -1,0 +1,20 @@
+# Tested top-level application versions. PyTorch is installed separately so the
+# setup script can choose CUDA or CPU wheels without changing application code.
+ultralytics==8.4.112
+lap==0.5.13
+opencv-python==4.14.0.94
+deepface==0.0.100
+tf-keras==2.21.0
+pyyaml==6.0.3
+numpy==2.4.6
+streamlit==1.61.1
+requests==2.34.2
+Pillow==12.3.0
+# Florence-2 remote model code is incompatible with Transformers 5.x.
+transformers==4.49.0
+accelerate==1.14.0
+timm==1.0.28
+einops==0.8.1
+pyttsx3==2.99
+pygame==2.6.1
+pytest==9.1.1

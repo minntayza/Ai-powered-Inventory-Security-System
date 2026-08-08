@@ -22,7 +22,7 @@ class FaceDatabase:
         names = []
         for item in os.listdir(self.db_path):
             item_path = os.path.join(self.db_path, item)
-            if os.path.isdir(item_path):
+            if os.path.isdir(item_path) and self.get_person_images(item):
                 names.append(item)
 
         return names

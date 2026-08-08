@@ -1,0 +1,6 @@
+source: 0
+width: 960
+height: 540
+fps: 10
+reconnect_delay_seconds: 1.0
+max_reconnect_delay_seconds: 10.0

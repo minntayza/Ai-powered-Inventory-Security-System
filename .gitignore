@@ -8,6 +8,10 @@ build
 
 data/logs/*
 !data/logs/.gitkeep
+data/inventory_yolo/
+runs/
+*.pt
+assets/known_faces/*.pkl
 
 *.env
 .env

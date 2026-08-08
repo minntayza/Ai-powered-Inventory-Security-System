@@ -1,0 +1,6 @@
+# Windows/Linux NVIDIA build for RTX 50-series and other CUDA 12.8-capable GPUs.
+--index-url https://download.pytorch.org/whl/cu128
+torch==2.11.0
+torchvision==0.26.0
+torchaudio==2.11.0
+

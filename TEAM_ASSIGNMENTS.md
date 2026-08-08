@@ -14,7 +14,7 @@ This document maps each team member to their assigned project folders, expected 
 | `src/backend_alerting/` | **Backend & Alerting Engineer** | Backend |
 | `src/utils/` | **All Members** (shared) | Shared helpers |
 | `hardware_setup/` | **Hardware & Network Specialist** | Hardware / Network |
-| `assets/aruco_markers/` | **Hardware & Network Specialist** | Badge images |
+| `assets/known_faces/` | **CV Engineer** + **Hardware Specialist** | Face database images |
 | `assets/audio/` | **Backend & Alerting Engineer** | Siren MP3 |
 | `assets/sample_images/` | **CV Engineer** + **VLM Engineer** | Test images |
 | `configs/` | **Hardware Specialist** + **Backend Engineer** | YAML configs |
@@ -34,24 +34,25 @@ This document maps each team member to their assigned project folders, expected 
 src/module_a_perception_engine/
 ├── __init__.py              (exists)
 ├── yolo_detector.py         # YOLOv8 inventory counting (bottles, backpacks)
-├── aruco_detector.py        # OpenCV ArUco marker detection for authorization
-├── person_tracker.py        # Person bounding box + badge correlation logic
+├── face_detector.py         # DeepFace face detection + recognition for authorization
+├── face_database.py         # Known face database management
+├── person_tracker.py        # Person bounding box + face recognition correlation logic
 ├── inventory_counter.py     # Dynamic item count output
 └── README.md                (exists)
 ```
 
 **Also Contributes To:**
 - `assets/sample_images/` — upload test images of target items
-- `assets/aruco_markers/` — coordinate with Hardware Specialist on marker IDs
-- `configs/` — provide YOLOv8 confidence thresholds
+- `assets/known_faces/` — collect and organize face photos for authorized personnel
+- `configs/` — provide YOLOv8 confidence thresholds, face recognition settings
 
 **Day-by-Day:**
 | Day | Deliverable |
 |---|---|
-| 1 | Setup YOLOv8 env, generate test ArUco markers, gather sample images |
-| 2 | Integrate ArUco + YOLOv8, output dynamic item counts |
-| 3 | Link YOLO/ArUco outputs to backend logic engine |
-| 4 | Refine confidence thresholds, fix lighting issues for ArUco readability |
+| 1 | Setup YOLOv8 + DeepFace environment, collect face photos, gather sample images |
+| 2 | Integrate DeepFace + YOLOv8, output dynamic item counts |
+| 3 | Link YOLO/face recognition outputs to backend logic engine |
+| 4 | Refine confidence thresholds, fine-tune face recognition accuracy |
 | 5 | Code freeze, clean scripts, finalize `requirements.txt` |
 
 ---
@@ -143,7 +144,7 @@ src/backend_alerting/
 |---|---|
 | 1 | Create base event loop framework, register Telegram bot via BotFather |
 | 2 | Code theft detection logic, connect MP3 siren trigger |
-| 3 | Link YOLO/ArUco states to event engine, ensure correct state tracking |
+| 3 | Link YOLO/face recognition states to event engine, ensure correct state tracking |
 | 4 | Test Telegram payload (photo + alert sent during breach) |
 | 5 | Finalize audit trail (CSV/DB), ensure all events are timestamped and logged |
 
@@ -151,7 +152,7 @@ src/backend_alerting/
 
 ## 5. Hardware & Network Specialist
 
-**Primary Folders:** `hardware_setup/`, `assets/aruco_markers/`, `configs/`
+**Primary Folders:** `hardware_setup/`, `assets/known_faces/`, `configs/`
 
 **Expected Files:**
 ```
@@ -160,16 +161,16 @@ hardware_setup/
 ├── cuda_setup_guide.md      # NVIDIA/CUDA driver installation steps for Legion 5
 ├── camera_setup_guide.md    # DroidCam/Iriun smartphone IP camera configuration
 ├── network_guide.md         # Local hotspot LAN setup and troubleshooting
-└── aruco_badge_specs.md     # ArUco marker IDs, print dimensions, placement guide
+└── face_database_specs.md   # Face photo collection guidelines, camera positioning
 
-assets/aruco_markers/
-└── (generated .png badge images)
+assets/known_faces/
+└── (face photos organized by person name)
 
 configs/
 ├── camera_config.yaml       # IP camera stream URL, resolution, FPS
 ├── model_config.yaml        # YOLOv8 and VLM model parameters
 ├── alert_config.yaml        # Telegram bot token, admin chat ID, siren settings
-└── thresholds.yaml          # Detection confidence, grace period duration
+└── thresholds.yaml          # Detection confidence, face recognition threshold, grace period duration
 ```
 
 **Day-by-Day:**
@@ -198,7 +199,7 @@ tests/
 └── test_qa_scenarios.py     # Simulated incident tests (authorized vs unauthorized)
 
 docs/api_contracts/
-├── yolo_output_schema.md    # YOLO bounding box + ArUco -> Backend format
+├── yolo_output_schema.md    # YOLO bounding box + face recognition -> Backend format
 ├── vlm_response_schema.md   # VLM answer -> Streamlit UI format
 ├── alert_payload_schema.md  # Alert data -> Telegram Bot format
 └── event_log_schema.md      # Event log -> Database/CSV format
@@ -240,11 +241,11 @@ All members may add shared helpers here:
 ## Quick Reference: Who Works Where
 
 ```
-CV Engineer       → src/module_a_perception_engine/   + assets/sample_images/
+CV Engineer       → src/module_a_perception_engine/   + assets/sample_images/ + assets/known_faces/
 VLM Engineer      → src/module_b_vlm_layer/           + assets/sample_images/
 Frontend Dev      → src/module_c_ui_dashboard/
 Backend Engineer  → src/backend_alerting/             + assets/audio/ + data/logs/
-Hardware Spec.    → hardware_setup/ + configs/        + assets/aruco_markers/
+Hardware Spec.    → hardware_setup/ + configs/        + assets/known_faces/ (camera positioning)
 PM & QA Lead      → tests/ + docs/api_contracts/      + docs/presentations/
 Everyone          → src/utils/
 ```

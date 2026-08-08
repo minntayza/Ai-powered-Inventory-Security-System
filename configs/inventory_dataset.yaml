@@ -1,0 +1,12 @@
+# Paths are resolved relative to this YAML file.
+path: ../data/inventory_yolo
+train: images/train
+val: images/val
+test: images/test
+
+# Keep person if this custom model must still support the security pipeline.
+# Label IDs in every .txt file must match this zero-based order.
+names:
+  0: person
+  1: bottle
+  2: backpack

@@ -1,0 +1,14 @@
+siren:
+  enabled: true
+  audio_path: "assets/audio/siren.mp3"
+
+telegram:
+  enabled: false
+  timeout_seconds: 10
+  max_attempts: 2
+
+storage:
+  database_path: "data/logs/security_events.db"
+  snapshot_directory: "data/logs/snapshots"
+  retention_days: 30
+

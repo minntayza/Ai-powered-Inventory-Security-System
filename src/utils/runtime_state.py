@@ -18,6 +18,16 @@ class RuntimeState:
             "frame": None,
             "perception": None,
             "security": {"state": "NORMAL"},
+            "monitoring": {
+                "mode": "DISARMED",
+                "baseline_ready": False,
+                "baseline_counts": {},
+                "current_counts": {},
+                "missing_items": {},
+                "extra_items": {},
+            },
+            "source": {"type": "live", "label": "Live camera"},
+            "performance": {},
             "last_error": None,
         }
 
@@ -31,6 +41,6 @@ class RuntimeState:
             result["frame"] = (
                 None if self._state["frame"] is None else self._state["frame"].copy()
             )
-            for key in ("perception", "security"):
+            for key in ("perception", "security", "monitoring", "source", "performance"):
                 result[key] = deepcopy(self._state[key])
             return result

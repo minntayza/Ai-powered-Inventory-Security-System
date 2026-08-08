@@ -110,8 +110,8 @@ class TheftDetector:
         relevant = []
         for person in persons:
             x1, y1, x2, y2 = person.get("bbox", [0, 0, 0, 0])
-            center_x, center_y = (x1 + x2) / 2, (y1 + y2) / 2
-            if region[0] <= center_x <= region[2] and region[1] <= center_y <= region[3]:
+            intersects = x2 >= region[0] and x1 <= region[2] and y2 >= region[1] and y1 <= region[3]
+            if intersects:
                 relevant.append(person)
         return relevant
 
@@ -137,6 +137,19 @@ class TheftDetector:
                 )
         states = sorted(set(track_states.values()) | set(self.buffer.observed_states))
         track_ids = sorted(track_states)
+        associations = change.get("associations", [])
+        candidates = []
+        primary_actor = None
+        for association in associations:
+            candidates.extend(association.get("actor_candidates", []))
+            if primary_actor is None and association.get("primary_actor"):
+                primary_actor = association["primary_actor"]
+        reasons = {
+            "suspected_theft": "protected_item_removed_with_unauthorized_or_unknown_person",
+            "authorized_removal": "all_relevant_people_authorized",
+            "inventory_recovered": "protected_inventory_returned_during_grace_period",
+            "unattributed_inventory_change": "no_relevant_person_observed",
+        }
         return {
             "event_id": str(uuid.uuid4()),
             "event_type": event_type,
@@ -145,10 +158,17 @@ class TheftDetector:
             "removed_items": deepcopy(change.get("removed_items", {})),
             "previous_counts": deepcopy(change.get("previous_counts", {})),
             "current_counts": deepcopy(change.get("current_counts", {})),
+            "baseline_counts": deepcopy(change.get("previous_counts", {})),
             "person_track_ids": track_ids,
             "authorization_states": states,
             "person_states": {str(key): value for key, value in track_states.items()},
+            "primary_actor": deepcopy(primary_actor),
+            "actor_candidates": deepcopy(candidates),
+            "decision_reason": reasons.get(event_type, event_type),
+            "zone_region": deepcopy(self.shelf_region),
+            "source_type": "live",
             "snapshot_path": None,
+            "video_path": None,
             "telegram_status": "pending" if status == "confirmed" else "disabled",
             "acknowledged": False,
         }
@@ -156,6 +176,17 @@ class TheftDetector:
     def acknowledge(self) -> None:
         if self.last_event:
             self.last_event["acknowledged"] = True
+
+    def reset(self) -> None:
+        """Clear transient security state without altering configuration."""
+        self.state = "NORMAL"
+        self.cooldown_until = 0.0
+        self.pending = None
+        self.last_event = None
+        self.buffer.reset()
+
+    def set_shelf_region(self, region: Optional[List[float]]) -> None:
+        self.shelf_region = list(region) if region else None
 
     def snapshot(self, new_event: Optional[Dict] = None) -> Dict:
         return {

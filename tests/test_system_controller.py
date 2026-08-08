@@ -28,6 +28,33 @@ class FakeCapture:
 
 
 class FakeTracker:
+    class Counter:
+        def __init__(self):
+            self.armed = False
+
+        def snapshot(self):
+            return {
+                "baseline_ready": True,
+                "baseline_counts": {"bottle": 2} if self.armed else {},
+                "stable_counts": {"bottle": 2},
+                "missing_items": {},
+                "extra_items": {},
+            }
+
+        def set_baseline(self):
+            self.armed = True
+            return True
+
+        def reset_baseline(self, clear_observations=True):
+            self.armed = False
+
+        def resume(self):
+            self.armed = True
+            return True
+
+    def __init__(self):
+        self.inventory_counter = self.Counter()
+
     def process_frame(self, _frame):
         drop = {
             "removed_items": {"bottle": 1},
@@ -60,6 +87,16 @@ class FakeTracker:
 
 
 class SystemControllerTests(TestCase):
+    def test_zone_validation_rejects_tiny_or_reversed_regions(self):
+        with self.assertRaises(ValueError):
+            SystemController._validate_region([0.5, 0.5, 0.4, 0.6])
+        with self.assertRaises(ValueError):
+            SystemController._validate_region([0.1, 0.1, 0.12, 0.9])
+        self.assertEqual(
+            SystemController._validate_region([0.1, 0.2, 0.9, 0.8]),
+            [0.1, 0.2, 0.9, 0.8],
+        )
+
     def test_confirmed_event_flows_to_sqlite(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -86,7 +123,9 @@ class SystemControllerTests(TestCase):
             controller = SystemController(
                 config_dir=str(config), tracker=FakeTracker(), capture=FakeCapture()
             ).start()
-            deadline = time.time() + 2
+            self.assertTrue(controller.set_baseline_and_arm()["ok"])
+            # A cold PyTorch import can take several seconds on CPU-only CI.
+            deadline = time.time() + 10
             while time.time() < deadline and not controller.recent_events(1):
                 time.sleep(0.01)
             controller.stop()
@@ -95,3 +134,29 @@ class SystemControllerTests(TestCase):
             self.assertEqual(events[0]["event_type"], "suspected_theft")
             self.assertTrue(Path(events[0]["snapshot_path"]).is_file())
 
+    def test_controller_starts_disarmed(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            config = root / "config"
+            config.mkdir()
+            documents = {
+                "camera_config.yaml": {"source": 0, "width": 20, "height": 20, "fps": 1},
+                "model_config.yaml": {"yolo": {}, "vlm": {}},
+                "thresholds.yaml": {"security": {}},
+                "alert_config.yaml": {
+                    "siren": {"enabled": False, "audio_path": str(root / "missing.mp3")},
+                    "telegram": {"enabled": False},
+                    "storage": {
+                        "database_path": str(root / "events.db"),
+                        "snapshot_directory": str(root / "snapshots"),
+                    },
+                },
+            }
+            for name, content in documents.items():
+                with (config / name).open("w", encoding="utf-8") as handle:
+                    yaml.safe_dump(content, handle)
+            controller = SystemController(
+                config_dir=str(config), tracker=FakeTracker(), capture=FakeCapture()
+            )
+            self.assertEqual(controller.snapshot()["monitoring"]["mode"], "DISARMED")
+            controller.stop()

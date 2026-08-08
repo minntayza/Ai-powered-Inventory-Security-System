@@ -3,6 +3,7 @@
 import os
 import cv2
 import numpy as np
+import time
 from deepface import DeepFace
 from typing import List, Dict
 from .face_database import FaceDatabase
@@ -27,10 +28,12 @@ class FaceDetector:
 
         self.face_db = FaceDatabase(db_path)
         self.known_names = self.face_db.get_known_names()
+        self.last_inference_ms = 0.0
 
         print(f"Face Detector initialized: {len(self.known_names)} known persons")
 
     def detect_faces(self, frame: np.ndarray) -> List[Dict]:
+        started = time.perf_counter()
         results = []
 
         try:
@@ -80,6 +83,7 @@ class FaceDetector:
         except Exception as e:
             print(f"Face detection error: {e}")
 
+        self.last_inference_ms = (time.perf_counter() - started) * 1000
         return results
 
     def refresh_database(self) -> None:

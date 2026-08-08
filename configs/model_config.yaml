@@ -23,6 +23,26 @@ yolo:
     - clock
     - scissors
 
+# COCO classes that should be visible to the demo are split by security policy.
+# Only protected classes participate in the baseline and theft decisions.
+inventory_policy:
+  protected:
+    - bottle
+    - backpack
+    - handbag
+    - cup
+    - laptop
+    - mouse
+    - remote
+    - keyboard
+    - cell phone
+    - book
+    - scissors
+  contextual:
+    - chair
+    - tv
+    - clock
+
 vlm:
   enabled: true
   model_name: "microsoft/Florence-2-base-ft"

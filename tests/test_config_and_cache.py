@@ -3,7 +3,7 @@ from unittest import TestCase
 import numpy as np
 
 from src.module_b_vlm_layer.prompt_cache import PromptCache
-from src.utils.config_loader import ConfigError, load_app_config
+from src.utils.config_loader import ConfigError, _validate_inventory_policy, load_app_config
 
 
 class ConfigurationTests(TestCase):
@@ -11,6 +11,27 @@ class ConfigurationTests(TestCase):
         config = load_app_config()
         self.assertEqual(config["camera"]["source"], 0)
         self.assertIn("yolo", config["models"])
+
+    def test_inventory_policy_rejects_overlap(self):
+        with self.assertRaises(ConfigError):
+            _validate_inventory_policy(
+                {
+                    "yolo": {"target_classes": ["person", "chair"]},
+                    "inventory_policy": {
+                        "protected": ["chair"],
+                        "contextual": ["chair"],
+                    },
+                }
+            )
+
+    def test_person_cannot_be_inventory(self):
+        with self.assertRaises(ConfigError):
+            _validate_inventory_policy(
+                {
+                    "yolo": {"target_classes": ["person"]},
+                    "inventory_policy": {"protected": ["person"], "contextual": []},
+                }
+            )
 
 
 class PromptCacheTests(TestCase):
@@ -29,4 +50,3 @@ class PromptCacheTests(TestCase):
         cache.put("two", "second")
         self.assertIsNone(cache.get("one"))
         self.assertEqual(cache.get("two"), "second")
-

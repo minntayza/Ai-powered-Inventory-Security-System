@@ -66,6 +66,10 @@ assets/known_faces/<person-name>/photo.jpg
 
 Add a siren MP3 at `assets/audio/siren.mp3`, or disable the siren in configuration.
 
+Authorized users can also be enrolled from the dashboard with 1-5 clear JPG or
+PNG images; three images are recommended. New face images are ignored by Git, but
+this repository is inside OneDrive, so review synchronization/privacy settings.
+
 ## Run
 
 ```powershell
@@ -89,6 +93,25 @@ python -c "import torch; print(torch.__version__, torch.cuda.is_available())"
 If this prints `False`, YOLO and Florence run on the CPU and will be slower. Install
 a Windows CUDA-enabled PyTorch build appropriate for the installed NVIDIA driver
 before enabling the VLM for a live demonstration.
+
+### Classroom monitoring workflow
+
+1. Wait for the camera and models to become ready.
+2. Configure the **Monitored zone** around the demonstration desk or shelf.
+3. Arrange protected objects and wait for stable counts.
+4. Click **Set baseline and arm**; alerts are impossible while disarmed.
+5. Pause before intentionally rearranging the scene.
+6. Reset and establish a new baseline when protected inventory changes.
+
+Protected classes are defined under `inventory_policy.protected` in
+`configs/model_config.yaml`. Contextual classes such as chairs, TVs, and clocks
+remain visible but never trigger theft. Uploaded videos run in simulation mode,
+which forcibly disables Telegram and the siren.
+
+Confirmed live incidents retain an image and bounded pre/post-event video when
+OpenCV encoding is available. Default media retention is 30 days. See
+`docs/CLASSROOM_DEMO_FEATURE_IMPLEMENTATION_PLAN.md` for the architecture,
+contracts, test matrix, and complete demonstration workflow.
 
 Run the engine without the dashboard with:
 

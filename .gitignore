@@ -12,6 +12,10 @@ data/inventory_yolo/
 runs/
 *.pt
 assets/known_faces/*.pkl
+# New face enrollments contain biometric data and must not be added to Git.
+assets/known_faces/**/*.jpg
+assets/known_faces/**/*.jpeg
+assets/known_faces/**/*.png
 
 *.env
 .env

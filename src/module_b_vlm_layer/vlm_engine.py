@@ -43,7 +43,7 @@ class FlorenceEngine:
             from transformers import AutoModelForCausalLM, AutoProcessor
 
             self.device = resolve_torch_device(self.device_setting)
-            dtype = torch.float16 if self.device == "cuda" else torch.float32
+            dtype = torch.float16 if str(self.device).startswith("cuda") else torch.float32
             self.processor = AutoProcessor.from_pretrained(
                 self.model_name, trust_remote_code=self.trust_remote_code
             )

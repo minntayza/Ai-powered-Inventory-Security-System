@@ -25,6 +25,13 @@ class AuditLoggerTests(TestCase):
             "snapshot_path": None,
             "telegram_status": "pending",
             "acknowledged": False,
+            "baseline_counts": {"bottle": 2},
+            "primary_actor": {"track_id": 1, "name": "Unknown"},
+            "actor_candidates": [{"track_id": 1, "association_score": 0.8}],
+            "decision_reason": "test",
+            "zone_region": [0, 0, 1, 1],
+            "source_type": "replay",
+            "video_path": None,
         }
 
     def tearDown(self):
@@ -36,6 +43,8 @@ class AuditLoggerTests(TestCase):
         self.assertTrue(Path(record["snapshot_path"]).is_file())
         stored = self.logger.recent_events(1)[0]
         self.assertEqual(stored["removed_items"], {"bottle": 1})
+        self.assertEqual(stored["primary_actor"]["track_id"], 1)
+        self.assertEqual(stored["source_type"], "replay")
 
     def test_updates_delivery_and_acknowledgement(self):
         self.logger.log_event(self.event)
@@ -43,4 +52,3 @@ class AuditLoggerTests(TestCase):
         stored = self.logger.recent_events(1)[0]
         self.assertEqual(stored["telegram_status"], "sent")
         self.assertTrue(stored["acknowledged"])
-

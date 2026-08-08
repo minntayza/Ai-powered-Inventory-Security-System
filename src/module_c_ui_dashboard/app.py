@@ -50,6 +50,84 @@ st.title("AI-Powered Inventory Security System")
 
 with st.sidebar:
     st.header("Controls")
+    monitoring = controller.snapshot().get("monitoring", {})
+    mode = monitoring.get("mode", "DISARMED")
+    st.caption(f"Monitoring: {mode}")
+    if mode == "DISARMED":
+        if st.button(
+            "Set baseline and arm",
+            use_container_width=True,
+        ):
+            result = controller.set_baseline_and_arm()
+            (st.success if result["ok"] else st.warning)(result["message"])
+            st.rerun()
+        if not monitoring.get("baseline_ready", False):
+            st.caption(
+                "Waiting for a stable protected item inside the monitored zone. "
+                "You may click the button to re-check readiness."
+            )
+    elif mode == "ARMED":
+        if st.button("Pause monitoring", use_container_width=True):
+            result = controller.pause_monitoring()
+            (st.success if result["ok"] else st.warning)(result["message"])
+            st.rerun()
+    else:
+        if st.button("Resume monitoring", use_container_width=True):
+            result = controller.resume_monitoring()
+            (st.success if result["ok"] else st.warning)(result["message"])
+            st.rerun()
+    if st.button("Reset baseline", use_container_width=True):
+        result = controller.reset_baseline()
+        st.success(result["message"])
+        st.rerun()
+
+    with st.expander("Monitored zone"):
+        active_region = monitoring.get("shelf_region") or [0.0, 0.0, 1.0, 1.0]
+        x1 = st.slider("Left", 0.0, 0.95, float(active_region[0]), 0.01)
+        y1 = st.slider("Top", 0.0, 0.95, float(active_region[1]), 0.01)
+        x2 = st.slider("Right", 0.05, 1.0, float(active_region[2]), 0.01)
+        y2 = st.slider("Bottom", 0.05, 1.0, float(active_region[3]), 0.01)
+        zone_columns = st.columns(2)
+        if zone_columns[0].button("Save zone", use_container_width=True):
+            try:
+                result = controller.set_shelf_region([x1, y1, x2, y2])
+                st.success(result["message"])
+                st.rerun()
+            except ValueError as exc:
+                st.error(str(exc))
+        if zone_columns[1].button("Full frame", use_container_width=True):
+            result = controller.set_shelf_region(None)
+            st.success(result["message"])
+            st.rerun()
+
+    with st.expander("Camera / replay source"):
+        source = controller.snapshot().get("source", {})
+        st.caption(f"Active: {source.get('label', 'Live camera')}")
+        replay_file = st.file_uploader(
+            "Demo recording", type=["mp4", "avi", "mov"], key="replay-video"
+        )
+        replay_loop = st.checkbox("Loop replay", value=False)
+        if st.button(
+            "Start safe replay",
+            disabled=replay_file is None,
+            use_container_width=True,
+        ):
+            try:
+                result = controller.switch_to_replay(
+                    replay_file.name, replay_file.getvalue(), loop=replay_loop
+                )
+                (st.success if result["ok"] else st.error)(result["message"])
+                if result["ok"]:
+                    st.rerun()
+            except Exception as exc:
+                st.error(f"Could not start replay: {exc}")
+        if source.get("type") == "replay" and st.button(
+            "Return to live camera", use_container_width=True
+        ):
+            result = controller.switch_to_live()
+            st.success(result["message"])
+            st.rerun()
+
     st.toggle("Speak VLM answers", key="speak_answers")
     if st.button("Stop siren"):
         controller.siren.stop()
@@ -58,6 +136,38 @@ with st.sidebar:
         if tracker is not None:
             tracker.face_detector.refresh_database()
             st.success("Face folders reloaded")
+    with st.expander("Authorized face enrollment"):
+        face_name = st.text_input("Person name", key="face-name")
+        face_uploads = st.file_uploader(
+            "1-5 clear face images",
+            type=["jpg", "jpeg", "png"],
+            accept_multiple_files=True,
+            key="face-images",
+        )
+        if st.button("Validate and enroll", use_container_width=True):
+            uploads = [(item.name, item.getvalue()) for item in face_uploads]
+            result = controller.enroll_face(face_name, uploads)
+            (st.success if result["ok"] else st.error)(result["message"])
+        identities = controller.known_faces()
+        if identities:
+            st.caption(
+                "Enrolled: " + ", ".join(
+                    f"{name} ({count})" for name, count in identities.items()
+                )
+            )
+            remove_name = st.selectbox("Remove identity", list(identities), key="remove-face")
+            confirm_remove = st.checkbox(
+                f"Confirm permanent removal of {remove_name}", key="confirm-remove-face"
+            )
+            if st.button(
+                "Remove selected identity",
+                disabled=not confirm_remove,
+                use_container_width=True,
+            ):
+                result = controller.remove_face(remove_name)
+                (st.success if result["ok"] else st.error)(result["message"])
+                if result["ok"]:
+                    st.rerun()
     st.caption("Telegram: " + ("enabled" if controller.telegram.enabled else "disabled"))
 
 left, right = st.columns([3, 2])

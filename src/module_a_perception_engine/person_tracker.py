@@ -5,10 +5,11 @@ import numpy as np
 import time
 from concurrent.futures import Future, ThreadPoolExecutor
 from copy import deepcopy
-from typing import Dict, List
+from typing import Dict, Iterable, List, Optional
 from .yolo_detector import YOLODetector
 from .face_detector import FaceDetector
 from .inventory_counter import InventoryCounter
+from .interaction_associator import InteractionAssociator
 
 
 class PersonTracker:
@@ -23,10 +24,20 @@ class PersonTracker:
         yolo_detector=None,
         face_detector=None,
         inventory_counter=None,
+        contextual_counter=None,
+        protected_classes: Optional[Iterable[str]] = None,
+        contextual_classes: Optional[Iterable[str]] = None,
+        shelf_region: Optional[List[float]] = None,
+        interaction_associator=None,
     ):
         self.yolo_detector = yolo_detector or YOLODetector()
         self.face_detector = face_detector or FaceDetector(db_path=face_db_path)
         self.inventory_counter = inventory_counter or InventoryCounter()
+        self.contextual_counter = contextual_counter or InventoryCounter()
+        self.protected_classes = set(protected_classes or ())
+        self.contextual_classes = set(contextual_classes or ())
+        self.shelf_region = shelf_region
+        self.interaction_associator = interaction_associator or InteractionAssociator()
 
         self.grace_period = grace_period
         self.person_history = {}
@@ -41,7 +52,28 @@ class PersonTracker:
 
     def process_frame(self, frame: np.ndarray) -> Dict:
         yolo_results = self.yolo_detector.detect(frame)
-        inventory = self.inventory_counter.update(yolo_results)
+        classified_items = []
+        for item in yolo_results.get("inventory", []):
+            enriched = dict(item)
+            label = enriched.get("label", "unknown")
+            if label in self.protected_classes:
+                enriched["policy"] = "protected"
+            elif label in self.contextual_classes:
+                enriched["policy"] = "contextual"
+            else:
+                enriched.setdefault("policy", "ignored")
+            enriched["in_zone"] = self._item_in_zone(enriched, frame)
+            classified_items.append(enriched)
+
+        protected = [
+            item for item in classified_items
+            if item["policy"] == "protected" and item["in_zone"]
+        ]
+        contextual = [
+            item for item in classified_items if item["policy"] == "contextual"
+        ]
+        inventory = self.inventory_counter.update({"inventory": protected})
+        context_inventory = self.contextual_counter.update({"inventory": contextual})
 
         self.frame_number += 1
         face_results = self._completed_face_results()
@@ -56,6 +88,16 @@ class PersonTracker:
         persons = self._correlate_persons_faces(
             yolo_results["persons"], face_results
         )
+        associations = self.interaction_associator.observe(
+            protected,
+            persons,
+            [int(frame.shape[1]), int(frame.shape[0])],
+            drop=inventory.get("drop"),
+        )
+        if inventory.get("drop") is not None:
+            inventory["drop"]["associations"] = deepcopy(associations)
+        if inventory.get("change") is not None:
+            inventory["change"]["associations"] = deepcopy(associations)
 
         return {
             "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S"),
@@ -63,12 +105,31 @@ class PersonTracker:
             "inventory": {
                 **inventory,
                 "count": inventory["total_stable_count"],
-                "items": yolo_results["inventory"]
+                "items": classified_items,
+                "protected_counts": inventory["stable_counts"],
+                "contextual_counts": context_inventory["stable_counts"],
+                "associations": associations,
             },
             "frame_number": self.frame_number,
             "frame_size": [int(frame.shape[1]), int(frame.shape[0])],
             "face_analysis_pending": self._face_future is not None,
         }
+
+    def _item_in_zone(self, item: Dict, frame: np.ndarray) -> bool:
+        if not self.shelf_region:
+            return True
+        height, width = frame.shape[:2]
+        x1, y1, x2, y2 = item.get("bbox", [0, 0, 0, 0])
+        center_x, center_y = (x1 + x2) / 2, (y1 + y2) / 2
+        rx1, ry1, rx2, ry2 = self.shelf_region
+        return (
+            rx1 * width <= center_x <= rx2 * width
+            and ry1 * height <= center_y <= ry2 * height
+        )
+
+    def set_shelf_region(self, region: Optional[List[float]]) -> None:
+        self.shelf_region = list(region) if region else None
+        self.interaction_associator.reset()
 
     def _completed_face_results(self) -> List[Dict]:
         if self._face_future is None or not self._face_future.done():
@@ -85,6 +146,20 @@ class PersonTracker:
         if self._face_future is not None:
             self._face_future.cancel()
         self._face_executor.shutdown(wait=False, cancel_futures=True)
+
+    def reset_tracking(self) -> None:
+        """Clear source-specific histories while retaining loaded models."""
+        self.person_history.clear()
+        self.next_person_id = 1
+        self.frame_number = 0
+        self.inventory_counter.reset_baseline(clear_observations=True)
+        self.contextual_counter.reset()
+        self.interaction_associator.reset()
+        predictor = getattr(self.yolo_detector.model, "predictor", None)
+        for tracker in getattr(predictor, "trackers", []) or []:
+            reset = getattr(tracker, "reset", None)
+            if callable(reset):
+                reset()
 
     def _correlate_persons_faces(
         self,
@@ -236,6 +311,21 @@ class PersonTracker:
     def draw_tracking(self, frame: np.ndarray, output: Dict) -> np.ndarray:
         frame = frame.copy()
 
+        if self.shelf_region:
+            height, width = frame.shape[:2]
+            rx1, ry1, rx2, ry2 = self.shelf_region
+            cv2.rectangle(
+                frame,
+                (int(rx1 * width), int(ry1 * height)),
+                (int(rx2 * width), int(ry2 * height)),
+                (255, 180, 0),
+                2,
+            )
+            cv2.putText(
+                frame, "MONITORED ZONE", (int(rx1 * width) + 5, int(ry1 * height) + 22),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.55, (255, 180, 0), 2,
+            )
+
         for person in output["persons"]:
             x1, y1, x2, y2 = person["bbox"]
 
@@ -251,6 +341,19 @@ class PersonTracker:
                        cv2.FONT_HERSHEY_SIMPLEX, 0.6, color, 2)
 
         inventory_count = output["inventory"]["count"]
+        for item in output["inventory"].get("items", []):
+            x1, y1, x2, y2 = item["bbox"]
+            if item.get("policy") == "protected" and item.get("in_zone"):
+                color = (0, 255, 255)
+            elif item.get("policy") == "contextual":
+                color = (160, 160, 160)
+            else:
+                color = (90, 90, 90)
+            cv2.rectangle(frame, (x1, y1), (x2, y2), color, 1)
+            cv2.putText(
+                frame, item.get("label", "item"), (x1, max(12, y1 - 4)),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.45, color, 1,
+            )
         cv2.putText(frame, f"Inventory: {inventory_count}", (10, 30),
                    cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 255), 2)
 

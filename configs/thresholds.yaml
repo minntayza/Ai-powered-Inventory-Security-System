@@ -27,6 +27,12 @@ inventory:
   confirmation_frames: 5
   warmup_frames: 15
 
+association:
+  lookback_seconds: 2.0
+  person_bbox_expansion: 0.15
+  minimum_score: 0.35
+  ambiguity_margin: 0.10
+
 security:
   grace_period_seconds: 8
   alert_cooldown_seconds: 30

@@ -66,5 +66,31 @@ def load_app_config(config_dir: str | Path = "configs") -> Dict[str, Any]:
     require_keys(config["camera"], ("source", "width", "height", "fps"), "camera")
     require_keys(config["models"], ("yolo", "vlm"), "model")
     require_keys(config["alerts"], ("siren", "telegram", "storage"), "alert")
+    _validate_inventory_policy(config["models"])
     return config
 
+
+def _validate_inventory_policy(models: Dict[str, Any]) -> None:
+    """Validate the security policy independently of a particular YOLO model."""
+    policy = models.get("inventory_policy", {})
+    protected = policy.get("protected", [])
+    contextual = policy.get("contextual", [])
+    if not isinstance(protected, list) or not isinstance(contextual, list):
+        raise ConfigError("inventory_policy protected/contextual values must be lists")
+    protected_set = {str(item) for item in protected}
+    contextual_set = {str(item) for item in contextual}
+    overlap = protected_set & contextual_set
+    if overlap:
+        raise ConfigError(
+            "Inventory policy classes cannot overlap: " + ", ".join(sorted(overlap))
+        )
+    if "person" in protected_set | contextual_set:
+        raise ConfigError("person is a security subject and cannot be inventory")
+    targets = models.get("yolo", {}).get("target_classes")
+    if targets is not None:
+        unknown = (protected_set | contextual_set) - {str(item) for item in targets}
+        if unknown:
+            raise ConfigError(
+                "Inventory policy classes missing from yolo.target_classes: "
+                + ", ".join(sorted(unknown))
+            )

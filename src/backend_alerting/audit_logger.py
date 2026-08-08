@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import sqlite3
 import threading
+import time
 from contextlib import contextmanager
 from copy import deepcopy
 from pathlib import Path
@@ -88,6 +89,21 @@ class AuditLogger:
                 );
                 """
             )
+            existing = {
+                row["name"] for row in connection.execute("PRAGMA table_info(events)").fetchall()
+            }
+            migrations = {
+                "baseline_counts": "TEXT NOT NULL DEFAULT '{}'",
+                "primary_actor": "TEXT",
+                "actor_candidates": "TEXT NOT NULL DEFAULT '[]'",
+                "decision_reason": "TEXT NOT NULL DEFAULT ''",
+                "zone_region": "TEXT",
+                "source_type": "TEXT NOT NULL DEFAULT 'live'",
+                "video_path": "TEXT",
+            }
+            for column, definition in migrations.items():
+                if column not in existing:
+                    connection.execute(f"ALTER TABLE events ADD COLUMN {column} {definition}")
 
     def save_snapshot(self, event_id: str, frame: np.ndarray) -> str:
         path = self.snapshot_directory / f"{event_id}.jpg"
@@ -102,7 +118,13 @@ class AuditLogger:
         with self._lock, self._connection() as connection:
             connection.execute(
                 """
-                INSERT OR REPLACE INTO events VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                INSERT OR REPLACE INTO events (
+                    event_id, event_type, status, timestamp, removed_items,
+                    previous_counts, current_counts, person_track_ids,
+                    authorization_states, snapshot_path, telegram_status,
+                    acknowledged, baseline_counts, primary_actor, actor_candidates,
+                    decision_reason, zone_region, source_type, video_path
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     record["event_id"], record["event_type"], record["status"],
@@ -113,6 +135,13 @@ class AuditLogger:
                     json.dumps(record.get("authorization_states", [])),
                     record.get("snapshot_path"), record.get("telegram_status", "disabled"),
                     int(record.get("acknowledged", False)),
+                    json.dumps(record.get("baseline_counts", {})),
+                    json.dumps(record.get("primary_actor")) if record.get("primary_actor") else None,
+                    json.dumps(record.get("actor_candidates", [])),
+                    record.get("decision_reason", ""),
+                    json.dumps(record.get("zone_region")) if record.get("zone_region") else None,
+                    record.get("source_type", "live"),
+                    record.get("video_path"),
                 ),
             )
             connection.execute(
@@ -133,7 +162,7 @@ class AuditLogger:
         return record
 
     def update_event(self, event_id: str, **values: object) -> None:
-        allowed = {"telegram_status", "acknowledged", "snapshot_path", "status"}
+        allowed = {"telegram_status", "acknowledged", "snapshot_path", "video_path", "status"}
         updates = {key: value for key, value in values.items() if key in allowed}
         if not updates:
             return
@@ -167,12 +196,57 @@ class AuditLogger:
         result = []
         json_fields = {
             "removed_items", "previous_counts", "current_counts",
-            "person_track_ids", "authorization_states",
+            "person_track_ids", "authorization_states", "baseline_counts",
+            "actor_candidates",
         }
         for row in rows:
             item = dict(row)
             for field in json_fields:
                 item[field] = json.loads(item[field])
+            item["primary_actor"] = (
+                json.loads(item["primary_actor"]) if item.get("primary_actor") else None
+            )
+            item["zone_region"] = (
+                json.loads(item["zone_region"]) if item.get("zone_region") else None
+            )
             item["acknowledged"] = bool(item["acknowledged"])
             result.append(item)
         return result
+
+    def cleanup_media(self, retention_days: int, replay_directory: Optional[str] = None) -> None:
+        """Remove expired runtime media while retaining the event audit rows."""
+        cutoff = time.time() - max(1, int(retention_days)) * 86400
+        with self._lock, self._connection() as connection:
+            rows = connection.execute(
+                "SELECT event_id, snapshot_path, video_path FROM events"
+            ).fetchall()
+            for row in rows:
+                updates = {}
+                for column in ("snapshot_path", "video_path"):
+                    value = row[column]
+                    if not value:
+                        continue
+                    path = Path(value)
+                    expired = path.exists() and path.stat().st_mtime < cutoff
+                    if expired:
+                        try:
+                            path.unlink()
+                        except OSError:
+                            continue
+                    if expired or not path.exists():
+                        updates[column] = None
+                if updates:
+                    columns = ", ".join(f"{key} = ?" for key in updates)
+                    connection.execute(
+                        f"UPDATE events SET {columns} WHERE event_id = ?",
+                        [*updates.values(), row["event_id"]],
+                    )
+        if replay_directory:
+            directory = resolve_project_path(replay_directory)
+            if directory.is_dir():
+                for path in directory.iterdir():
+                    try:
+                        if path.is_file() and path.stat().st_mtime < cutoff:
+                            path.unlink()
+                    except OSError:
+                        continue

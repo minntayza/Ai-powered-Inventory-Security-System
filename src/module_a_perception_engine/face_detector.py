@@ -3,6 +3,7 @@
 import os
 import cv2
 import numpy as np
+import time
 from deepface import DeepFace
 from typing import List, Dict
 from .face_database import FaceDatabase
@@ -27,10 +28,12 @@ class FaceDetector:
 
         self.face_db = FaceDatabase(db_path)
         self.known_names = self.face_db.get_known_names()
+        self.last_inference_ms = 0.0
 
         print(f"Face Detector initialized: {len(self.known_names)} known persons")
 
     def detect_faces(self, frame: np.ndarray) -> List[Dict]:
+        started = time.perf_counter()
         results = []
 
         try:
@@ -56,6 +59,7 @@ class FaceDetector:
                             "bbox": [x, y, w, h],
                             "name": "Spoof",
                             "authorized": False,
+                            "authorization_state": "spoof",
                             "confidence": 0.0,
                             "face_detected": True,
                             "is_real": False
@@ -70,6 +74,7 @@ class FaceDetector:
                         "bbox": [x, y, w, h],
                         "name": name,
                         "authorized": authorized,
+                        "authorization_state": "authorized" if authorized else "unknown",
                         "confidence": confidence,
                         "face_detected": True,
                         "is_real": True
@@ -78,7 +83,12 @@ class FaceDetector:
         except Exception as e:
             print(f"Face detection error: {e}")
 
+        self.last_inference_ms = (time.perf_counter() - started) * 1000
         return results
+
+    def refresh_database(self) -> None:
+        """Reload enrolled folder names after authorized images are added."""
+        self.known_names = self.face_db.get_known_names()
 
     def _recognize_face(
         self, frame: np.ndarray, x: int, y: int, w: int, h: int

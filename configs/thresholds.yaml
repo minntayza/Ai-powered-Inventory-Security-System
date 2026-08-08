@@ -2,19 +2,39 @@ yolo:
   model_path: "yolov8n.pt"
   confidence_threshold: 0.5
   iou_threshold: 0.45
-  target_classes:
-    - "person"
-    - "bottle"
-    - "backpack"
+  # null enables every class in the loaded model. Person detections are still
+  # separated from inventory detections for face recognition and tracking.
+  target_classes: null
 
 face_recognition:
   model_name: "VGG-Face"
   detector_backend: "opencv"
   distance_metric: "cosine"
   recognition_threshold: 0.4
-  anti_spoofing: true
+  # Disabled for the CPU-only classroom demo. Re-enable after GPU acceleration.
+  anti_spoofing: false
   db_path: "assets/known_faces"
 
 person_tracking:
   grace_period_seconds: 3
   min_face_size: 50
+  face_interval_frames: 10
+  authorization_cache_seconds: 8
+  track_expiry_seconds: 5
+
+inventory:
+  window_size: 15
+  confirmation_frames: 5
+  warmup_frames: 15
+
+association:
+  lookback_seconds: 2.0
+  person_bbox_expansion: 0.15
+  minimum_score: 0.35
+  ambiguity_margin: 0.10
+
+security:
+  grace_period_seconds: 8
+  alert_cooldown_seconds: 30
+  # Optional normalized [x1, y1, x2, y2]. Null treats the full frame as monitored.
+  shelf_region: null

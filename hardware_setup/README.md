@@ -14,13 +14,13 @@ hardware_setup/
 | `cuda_setup_guide.md` | Step-by-step NVIDIA/CUDA driver installation and verification for Lenovo Legion 5 |
 | `camera_setup_guide.md` | DroidCam/Iriun smartphone IP camera configuration, stream URL, resolution settings |
 | `network_guide.md` | Local smartphone hotspot LAN setup, IP addressing, troubleshooting connection drops |
-| `aruco_badge_specs.md` | ArUco marker dictionary ID, badge print dimensions, chest placement instructions |
+| `face_database_specs.md` | Face photo collection guidelines, camera positioning, lighting requirements for enrollment |
 
 ## Also Responsible For
 
 | Folder | Task |
 |---|---|
-| `assets/aruco_markers/` | Generate and save printable ArUco badge PNG images |
+| `assets/known_faces/` | Assist with collecting and organizing face photos for authorized personnel |
 | `configs/` | Create and maintain all YAML config files: `camera_config.yaml`, `model_config.yaml`, `alert_config.yaml`, `thresholds.yaml` |
 
 ## Day-by-Day Deliverables
@@ -36,5 +36,5 @@ hardware_setup/
 ## Notes
 
 - Keep a USB webcam on standby as backup if hotspot drops
-- ArUco badges must be clearly visible to camera when worn on chest
-- Camera angle must ensure ArUco markers are always readable under demo lighting
+- Camera angle must capture faces clearly at typical standing distance
+- Ensure demo lighting is adequate for reliable face recognition

@@ -1,26 +1,77 @@
-"""YOLOv8 object detector for inventory counting."""
+"""Ultralytics YOLO detector for people and custom inventory classes."""
 
 from ultralytics import YOLO
 import cv2
+import logging
 import numpy as np
-from typing import Dict, List
+import time
+from typing import Dict, Iterable, List, Optional
+
+from src.utils.gpu_manager import resolve_torch_device
 
 
 class YOLODetector:
-    """YOLOv8 object detector for persons, bottles, backpacks."""
+    """Detect people separately from the inventory classes of a YOLO model."""
 
-    TARGET_CLASSES = {
-        0: "person",
-        24: "backpack",
-        39: "bottle"
-    }
-
-    def __init__(self, model_path: str = "yolov8n.pt", confidence: float = 0.5):
+    def __init__(
+        self,
+        model_path: str = "yolov8n.pt",
+        confidence: float = 0.5,
+        inventory_classes: Optional[Iterable[str]] = None,
+        iou_threshold: float = 0.45,
+        image_size: int = 640,
+        device: Optional[str] = None,
+        tracking: bool = True,
+        protected_classes: Optional[Iterable[str]] = None,
+        contextual_classes: Optional[Iterable[str]] = None,
+    ):
         self.model = YOLO(model_path)
         self.confidence = confidence
+        self.iou_threshold = iou_threshold
+        self.image_size = image_size
+        self.device = resolve_torch_device(device)
+        self.tracking = tracking
+        self._logger = logging.getLogger("inventory_security.yolo")
+        # None means that every non-person class supported by the model is
+        # returned as inventory. Pass an iterable of names to filter the list.
+        self.inventory_classes = (
+            set(inventory_classes) if inventory_classes is not None else None
+        )
+        self.protected_classes = set(protected_classes or ())
+        self.contextual_classes = set(contextual_classes or ())
+        self.last_inference_ms = 0.0
+
+    def _class_name(self, class_id: int) -> str:
+        """Resolve a class by name so custom models do not depend on COCO IDs."""
+        names = self.model.names
+        if isinstance(names, dict):
+            return str(names.get(class_id, class_id))
+        return str(names[class_id])
 
     def detect(self, frame: np.ndarray) -> Dict[str, List[Dict]]:
-        results = self.model(frame, conf=self.confidence, verbose=False)
+        started = time.perf_counter()
+        inference = self.model.track if self.tracking else self.model.predict
+        options = {
+            "conf": self.confidence,
+            "iou": self.iou_threshold,
+            "imgsz": self.image_size,
+            "device": self.device,
+            "verbose": False,
+        }
+        if self.tracking:
+            options.update({"persist": True, "tracker": "bytetrack.yaml"})
+        try:
+            results = inference(frame, **options)
+        except RuntimeError as exc:
+            if self.device == "cpu":
+                raise
+            self._logger.warning(
+                "%s inference failed; retrying YOLO on CPU: %s", self.device, exc
+            )
+            self.device = "cpu"
+            options["device"] = "cpu"
+            results = inference(frame, **options)
+        self.last_inference_ms = (time.perf_counter() - started) * 1000
 
         persons = []
         inventory = []
@@ -28,19 +79,27 @@ class YOLODetector:
         for result in results:
             for box in result.boxes:
                 cls_id = int(box.cls[0])
+                label = self._class_name(cls_id)
                 conf = float(box.conf[0])
                 x1, y1, x2, y2 = map(int, box.xyxy[0])
 
-                if cls_id == 0:
+                if label == "person":
                     persons.append({
                         "bbox": [x1, y1, x2, y2],
-                        "confidence": conf
+                        "confidence": conf,
+                        "track_id": int(box.id[0]) if box.id is not None else None,
                     })
-                elif cls_id in [24, 39]:
+                elif self.inventory_classes is None or label in self.inventory_classes:
                     inventory.append({
-                        "label": self.TARGET_CLASSES[cls_id],
+                        "label": label,
                         "bbox": [x1, y1, x2, y2],
-                        "confidence": conf
+                        "confidence": conf,
+                        "track_id": int(box.id[0]) if box.id is not None else None,
+                        "policy": (
+                            "protected" if label in self.protected_classes
+                            else "contextual" if label in self.contextual_classes
+                            else "ignored"
+                        ),
                     })
 
         return {"persons": persons, "inventory": inventory}

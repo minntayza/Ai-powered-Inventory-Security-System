@@ -11,11 +11,11 @@ tests/
 
 | File | Purpose |
 |---|---|
-| `test_module_a.py` | Unit tests for Perception Engine (YOLO detection, ArUco detection, item counting) |
+| `test_module_a.py` | Unit tests for Perception Engine (YOLO detection, face recognition, item counting) |
 | `test_module_b.py` | Unit tests for VLM Layer (VQA response format, TTS output, inference latency) |
 | `test_module_c.py` | Unit tests for UI Dashboard (widget rendering, alert state transitions) |
 | `test_backend.py` | Unit tests for Backend & Alerting (theft logic, Telegram payload, audit logging) |
-| `test_integration.py` | End-to-end pipeline test: Camera → YOLO/ArUco → Logic → Alert → UI |
+| `test_integration.py` | End-to-end pipeline test: Camera → YOLO/Face Recognition → Logic → Alert → UI |
 | `test_qa_scenarios.py` | Simulated incident scenarios: authorized user takes item vs. unauthorized intruder |
 
 ## Also Responsible For
@@ -39,7 +39,7 @@ tests/
 
 1. **Authorized user takes an item** — No alert should trigger
 2. **Unknown person takes an item** — Theft alert + siren + Telegram notification
-3. **Badge briefly occluded** — Grace buffer prevents false alarm within 3 seconds
+3. **Face briefly not visible** — Grace buffer prevents false alarm within 3 seconds
 4. **VLM Q&A about incident** — Ask "What is the person doing?" and get a correct answer
 5. **Network drop** — System recovers when camera reconnects
 

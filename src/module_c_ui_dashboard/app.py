@@ -26,6 +26,7 @@ from src.module_c_ui_dashboard.operational_view import render_operational_view
 st.set_page_config(page_title="Inventory Security", page_icon="🛡️", layout="wide")
 
 
+
 @st.cache_resource
 def get_controller() -> SystemController:
     return SystemController().start()
@@ -46,16 +47,36 @@ def get_vqa(_controller: SystemController) -> tuple[VQAPipeline, TTSEngine]:
 controller = get_controller()
 vqa, tts = get_vqa(controller)
 
-st.title("AI-Powered Inventory Security System")
+# Header Banner
+st.markdown(
+    """
+    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.2rem; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 0.8rem;">
+        <div>
+            <div style="font-size: 2rem; font-weight: 800; background: linear-gradient(135deg, #38bdf8, #818cf8, #c084fc); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">
+                🛡️ AI-Powered Inventory Security System
+            </div>
+            <div style="font-size: 0.85rem; color: #94a3b8; margin-top: 2px;">
+                YOLO Perception • DeepFace Authorization • Deterministic Theft Engine • Florence-2 VLM
+            </div>
+        </div>
+        <div>
+            <span style="background: rgba(16, 185, 129, 0.15); border: 1px solid rgba(16, 185, 129, 0.3); color: #34d399; font-size: 0.75rem; font-weight: 700; padding: 6px 14px; border-radius: 20px; letter-spacing: 0.5px;">
+                ● SYSTEM ACTIVE
+            </span>
+        </div>
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
 
 with st.sidebar:
-    st.header("Controls")
+    st.header("⚙️ Controls")
     monitoring = controller.snapshot().get("monitoring", {})
     mode = monitoring.get("mode", "DISARMED")
-    st.caption(f"Monitoring: {mode}")
+    st.caption(f"Status: **{mode}**")
     if mode == "DISARMED":
         if st.button(
-            "Set baseline and arm",
+            "🛡️ Set baseline and arm",
             use_container_width=True,
         ):
             result = controller.set_baseline_and_arm()
@@ -67,48 +88,48 @@ with st.sidebar:
                 "You may click the button to re-check readiness."
             )
     elif mode == "ARMED":
-        if st.button("Pause monitoring", use_container_width=True):
+        if st.button("⏸️ Pause monitoring", use_container_width=True):
             result = controller.pause_monitoring()
             (st.success if result["ok"] else st.warning)(result["message"])
             st.rerun()
     else:
-        if st.button("Resume monitoring", use_container_width=True):
+        if st.button("▶️ Resume monitoring", use_container_width=True):
             result = controller.resume_monitoring()
             (st.success if result["ok"] else st.warning)(result["message"])
             st.rerun()
-    if st.button("Reset baseline", use_container_width=True):
+    if st.button("🔄 Reset baseline", use_container_width=True):
         result = controller.reset_baseline()
         st.success(result["message"])
         st.rerun()
 
-    with st.expander("Monitored zone"):
+    with st.expander("🎯 Monitored Zone Selector"):
         active_region = monitoring.get("shelf_region") or [0.0, 0.0, 1.0, 1.0]
-        x1 = st.slider("Left", 0.0, 0.95, float(active_region[0]), 0.01)
-        y1 = st.slider("Top", 0.0, 0.95, float(active_region[1]), 0.01)
-        x2 = st.slider("Right", 0.05, 1.0, float(active_region[2]), 0.01)
-        y2 = st.slider("Bottom", 0.05, 1.0, float(active_region[3]), 0.01)
+        x1 = st.slider("Left Boundary", 0.0, 0.95, float(active_region[0]), 0.01)
+        y1 = st.slider("Top Boundary", 0.0, 0.95, float(active_region[1]), 0.01)
+        x2 = st.slider("Right Boundary", 0.05, 1.0, float(active_region[2]), 0.01)
+        y2 = st.slider("Bottom Boundary", 0.05, 1.0, float(active_region[3]), 0.01)
         zone_columns = st.columns(2)
-        if zone_columns[0].button("Save zone", use_container_width=True):
+        if zone_columns[0].button("💾 Save zone", use_container_width=True):
             try:
                 result = controller.set_shelf_region([x1, y1, x2, y2])
                 st.success(result["message"])
                 st.rerun()
             except ValueError as exc:
                 st.error(str(exc))
-        if zone_columns[1].button("Full frame", use_container_width=True):
+        if zone_columns[1].button("🖼️ Full frame", use_container_width=True):
             result = controller.set_shelf_region(None)
             st.success(result["message"])
             st.rerun()
 
-    with st.expander("Camera / replay source"):
+    with st.expander("📹 Camera / Replay Source"):
         source = controller.snapshot().get("source", {})
-        st.caption(f"Active: {source.get('label', 'Live camera')}")
+        st.caption(f"Active Source: **{source.get('label', 'Live camera')}**")
         replay_file = st.file_uploader(
             "Demo recording", type=["mp4", "avi", "mov"], key="replay-video"
         )
         replay_loop = st.checkbox("Loop replay", value=False)
         if st.button(
-            "Start safe replay",
+            "▶️ Start safe replay",
             disabled=replay_file is None,
             use_container_width=True,
         ):
@@ -122,45 +143,45 @@ with st.sidebar:
             except Exception as exc:
                 st.error(f"Could not start replay: {exc}")
         if source.get("type") == "replay" and st.button(
-            "Return to live camera", use_container_width=True
+            "📷 Return to live camera", use_container_width=True
         ):
             result = controller.switch_to_live()
             st.success(result["message"])
             st.rerun()
 
-    st.toggle("Speak VLM answers", key="speak_answers")
-    if st.button("Stop siren"):
+    st.toggle("🔊 Speak VLM answers", key="speak_answers")
+    if st.button("🔇 Stop siren", use_container_width=True):
         controller.siren.stop()
-    if st.button("Refresh authorized faces"):
+    if st.button("🔄 Refresh face DB", use_container_width=True):
         tracker = controller.tracker
         if tracker is not None:
             tracker.face_detector.refresh_database()
             st.success("Face folders reloaded")
-    with st.expander("Authorized face enrollment"):
-        face_name = st.text_input("Person name", key="face-name")
+    with st.expander("👤 Authorized Face Enrollment"):
+        face_name = st.text_input("Person Name", key="face-name")
         face_uploads = st.file_uploader(
             "1-5 clear face images",
             type=["jpg", "jpeg", "png"],
             accept_multiple_files=True,
             key="face-images",
         )
-        if st.button("Validate and enroll", use_container_width=True):
+        if st.button("✅ Validate and enroll", use_container_width=True):
             uploads = [(item.name, item.getvalue()) for item in face_uploads]
             result = controller.enroll_face(face_name, uploads)
             (st.success if result["ok"] else st.error)(result["message"])
         identities = controller.known_faces()
         if identities:
             st.caption(
-                "Enrolled: " + ", ".join(
-                    f"{name} ({count})" for name, count in identities.items()
+                "Enrolled Identities: " + ", ".join(
+                    f"**{name}** ({count})" for name, count in identities.items()
                 )
             )
             remove_name = st.selectbox("Remove identity", list(identities), key="remove-face")
             confirm_remove = st.checkbox(
-                f"Confirm permanent removal of {remove_name}", key="confirm-remove-face"
+                f"Confirm removal of {remove_name}", key="confirm-remove-face"
             )
             if st.button(
-                "Remove selected identity",
+                "🗑️ Remove selected identity",
                 disabled=not confirm_remove,
                 use_container_width=True,
             ):
@@ -168,7 +189,7 @@ with st.sidebar:
                 (st.success if result["ok"] else st.error)(result["message"])
                 if result["ok"]:
                     st.rerun()
-    st.caption("Telegram: " + ("enabled" if controller.telegram.enabled else "disabled"))
+    st.caption("Telegram Notifications: " + ("🟢 Enabled" if controller.telegram.enabled else "🔴 Disabled"))
 
 left, right = st.columns([3, 2])
 with left:
@@ -181,12 +202,13 @@ with left:
     live_operational_panel()
 with right:
     render_assistant(controller, vqa, tts)
-    st.subheader("Recent activity")
+    st.markdown("### 📋 Recent Activity Logs")
     events = controller.recent_events(20)
     if events:
         st.dataframe(events, hide_index=True, use_container_width=True)
     else:
-        st.caption("No events recorded")
+        st.caption("No security events recorded yet")
 
-if st.button("Refresh dashboard", use_container_width=True):
+if st.button("🔄 Refresh Dashboard", use_container_width=True):
     st.rerun()
+

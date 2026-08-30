@@ -169,14 +169,18 @@ class PersonTracker:
         correlated = []
         self._expire_tracks()
         assigned_ids = set()
+        assigned_face_indexes = set()
 
         for person in person_bboxes:
             px1, py1, px2, py2 = person["bbox"]
 
             matched_face = None
+            matched_face_index = None
             best_score = 0.0
 
-            for face in face_results:
+            for face_index, face in enumerate(face_results):
+                if face_index in assigned_face_indexes:
+                    continue
                 fx, fy, fw, fh = face["bbox"]
 
                 face_center_x = fx + fw / 2
@@ -186,6 +190,7 @@ class PersonTracker:
                 if score > best_score:
                     best_score = score
                     matched_face = face
+                    matched_face_index = face_index
 
             model_track_id = person.get("track_id")
             if model_track_id is not None:
@@ -205,6 +210,7 @@ class PersonTracker:
 
             history = self.person_history[person_id]
             if matched_face:
+                assigned_face_indexes.add(matched_face_index)
                 person_data["name"] = matched_face["name"]
                 person_data["authorized"] = matched_face["authorized"]
                 person_data["face_confidence"] = matched_face["confidence"]

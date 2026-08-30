@@ -17,6 +17,8 @@ def resolve_torch_device(requested: str | None = "auto") -> str:
             return "mps"
         return "cpu"
     if normalized.startswith("cuda") and not torch.cuda.is_available():
+        if hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
+            return "mps"
         return "cpu"
     if normalized == "mps" and not (
         hasattr(torch.backends, "mps") and torch.backends.mps.is_available()

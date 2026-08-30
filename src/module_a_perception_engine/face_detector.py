@@ -130,12 +130,15 @@ class FaceDetector:
                 if distance < self.recognition_threshold:
                     identity_path = best_match.get("identity", "")
                     name = os.path.basename(os.path.dirname(identity_path))
-                    return name.capitalize(), True, 1 - distance
+                    return name, True, 1 - distance
 
             return "Unknown", False, 0.0
 
-        except Exception as e:
-            print(f"Recognition error: {e}")
+        except Exception as exc:
+            self.last_error = f"Face recognition failed: {exc}"
+            logging.getLogger("inventory_security.face_detector").error(
+                "%s", self.last_error
+            )
             return "Unknown", False, 0.0
 
     def draw_detections(self, frame: np.ndarray, detections: List[Dict]) -> np.ndarray:

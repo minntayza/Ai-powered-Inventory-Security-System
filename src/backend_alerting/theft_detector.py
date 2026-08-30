@@ -65,7 +65,7 @@ class TheftDetector:
 
         if self.state == "PENDING":
             self.buffer.observe(persons)
-            if self._inventory_recovered(change):
+            if self._inventory_recovered(change, self.pending):
                 event = self._make_event(
                     "inventory_recovered", "cancelled", self.pending or {}, persons, now
                 )
@@ -149,8 +149,27 @@ class TheftDetector:
         return list(by_track.values())
 
     @staticmethod
-    def _inventory_recovered(change: Optional[Dict]) -> bool:
-        return bool(change and change.get("added_items"))
+    def _inventory_recovered(
+        change: Optional[Dict], pending: Optional[Dict]
+    ) -> bool:
+        """Return true only when every item missing in the pending event is back."""
+        if not change or not pending:
+            return False
+        removed = pending.get("removed_items", {})
+        if not removed:
+            return False
+        baseline = pending.get("previous_counts", {})
+        current = change.get("current_counts", {})
+        if baseline and current:
+            return all(
+                int(current.get(label, 0)) >= int(baseline.get(label, quantity))
+                for label, quantity in removed.items()
+            )
+        added = change.get("added_items", {})
+        return all(
+            int(added.get(label, 0)) >= int(quantity)
+            for label, quantity in removed.items()
+        )
 
     def _cancel(self, event: Dict) -> None:
         self.last_event = event

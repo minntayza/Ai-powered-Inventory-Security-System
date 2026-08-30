@@ -85,7 +85,7 @@ def render_assistant(controller, vqa, tts, transcriber) -> None:
     st.session_state.chat_messages.append({"role": "user", "content": question})
 
     if selected is None:
-        image = controller.snapshot().get("frame")
+        image = controller.latest_frame()
         source_id = "live"
     else:
         path = Path(selected["snapshot_path"])

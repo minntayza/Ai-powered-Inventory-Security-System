@@ -26,3 +26,24 @@ class FaceDetectorHealthTests(TestCase):
             detector.health(),
             {"healthy": False, "last_error": "face backend failed"},
         )
+
+    @mock.patch(
+        "src.module_a_perception_engine.face_detector.DeepFace.find",
+        side_effect=RuntimeError("embedding lookup failed"),
+    )
+    def test_embedding_lookup_failure_is_visible_in_detector_health(self, _find):
+        with tempfile.TemporaryDirectory() as directory:
+            detector = FaceDetector(db_path=directory, anti_spoofing=False)
+            detector.known_names = ["Alice Smith"]
+            result = detector._recognize_face(
+                np.zeros((20, 20, 3), dtype=np.uint8), 0, 0, 20, 20
+            )
+
+        self.assertEqual(result, ("Unknown", False, 0.0))
+        self.assertEqual(
+            detector.health(),
+            {
+                "healthy": False,
+                "last_error": "Face recognition failed: embedding lookup failed",
+            },
+        )

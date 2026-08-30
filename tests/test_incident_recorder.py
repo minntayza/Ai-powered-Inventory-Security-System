@@ -63,4 +63,10 @@ class IncidentRecorderTests(TestCase):
             recorder.observe(frame, now=1)
             recorder.observe(frame, now=3)
             self.assertEqual(len(recorder._buffer), 1)
+            self.assertEqual(
+                recorder._buffer_bytes,
+                len(recorder._buffer[0][1]),
+            )
+            recorder.reset_buffer()
+            self.assertEqual(recorder._buffer_bytes, 0)
             recorder.shutdown()

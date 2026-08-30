@@ -1,7 +1,8 @@
 yolo:
   model_path: "yolov8n.pt"
-  # auto selects cuda:0 when PyTorch can use it, otherwise cpu.
-  device: "auto"
+  # Prefer the NVIDIA GPU. Runtime device resolution safely falls back to CPU
+  # when CUDA is unavailable on another machine.
+  device: "cuda:0"
   image_size: 640
   confidence_threshold: 0.5
   iou_threshold: 0.45
@@ -46,7 +47,7 @@ inventory_policy:
 vlm:
   enabled: true
   model_name: "microsoft/Florence-2-base-ft"
-  # Florence follows the same CUDA/CPU auto-selection and fallback behavior.
-  device: "auto"
+  # Prefer the NVIDIA GPU, with the same runtime CPU fallback as YOLO.
+  device: "cuda:0"
   max_new_tokens: 128
   trust_remote_code: true

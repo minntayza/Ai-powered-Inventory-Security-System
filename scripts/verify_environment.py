@@ -63,17 +63,44 @@ def main() -> None:
         )
 
     from src.utils.config_loader import load_app_config
-    from src.utils.gpu_manager import device_info
+    from src.utils.gpu_manager import device_info, resolve_torch_device
 
-    load_app_config()
-    info = device_info("auto")
+    config = load_app_config()
+    yolo_requested = config["models"]["yolo"].get("device", "auto")
+    vlm_requested = config["models"]["vlm"].get("device", "auto")
+    yolo_selected = resolve_torch_device(yolo_requested)
+    vlm_selected = resolve_torch_device(vlm_requested)
+    info = device_info(yolo_requested)
+    if args.expected_device == "cuda" and not yolo_selected.startswith("cuda"):
+        raise SystemExit(f"YOLO is configured for {yolo_selected}, not CUDA")
+    if args.expected_device == "mps" and yolo_selected != "mps":
+        raise SystemExit(f"YOLO is configured for {yolo_selected}, not MPS")
+    if args.expected_device == "cpu" and yolo_selected != "cpu":
+        raise SystemExit(f"YOLO is configured for {yolo_selected}, not CPU")
+
+    accelerator_smoke = "not required"
+    if yolo_selected.startswith("cuda"):
+        try:
+            value = torch.arange(6, device=yolo_selected).sum().item()
+            torch.cuda.synchronize()
+            accelerator_smoke = f"PASS (tensor sum={int(value)})"
+        except Exception as exc:
+            raise SystemExit(f"CUDA tensor smoke test failed: {exc}") from exc
+    elif yolo_selected == "mps":
+        try:
+            value = torch.arange(6, device="mps").sum().item()
+            accelerator_smoke = f"PASS (tensor sum={int(value)})"
+        except Exception as exc:
+            raise SystemExit(f"MPS tensor smoke test failed: {exc}") from exc
     print(f"Python: {sys.version.split()[0]}")
     print(f"PyTorch: {torch.__version__}")
     print(f"CUDA runtime: {torch.version.cuda}")
     print(f"CUDA available: {cuda_available}")
     print(f"MPS available: {mps_available}")
-    print(f"Selected device: {info['selected']}")
+    print(f"YOLO requested/selected: {yolo_requested}/{yolo_selected}")
+    print(f"Florence requested/selected: {vlm_requested}/{vlm_selected}")
     print(f"GPU: {info.get('gpu_name') or 'None'}")
+    print(f"Accelerator smoke test: {accelerator_smoke}")
     print("Environment verification: PASS")
 
 

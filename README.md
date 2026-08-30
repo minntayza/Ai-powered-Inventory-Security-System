@@ -32,8 +32,8 @@ Set-ExecutionPolicy -Scope Process Bypass
 ```
 
 Do not copy `.venv` between laptops. Each member should generate it locally because
-CPU and CUDA wheels differ. Runtime configuration and application code remain the
-same on every laptop because `device: auto` selects the available hardware.
+CPU and CUDA wheels differ. The default configuration prefers `cuda:0`; runtime
+device resolution falls back to Apple MPS and then CPU when CUDA is unavailable.
 
 ### Apple M2 MacBook
 
@@ -44,8 +44,9 @@ bash scripts/setup_macos.sh
 ```
 
 The script installs native ARM64 PyTorch wheels and verifies the `mps` Metal GPU
-backend. The same `device: auto` configuration selects `mps`; unsupported MPS
-operations and model-level accelerator failures fall back to CPU. Start the app with:
+backend. The configured CUDA preference resolves to `mps` when CUDA is unavailable;
+unsupported MPS operations and model-level accelerator failures fall back to CPU.
+Start the app with:
 
 ```bash
 .venv/bin/python -m streamlit run src/module_c_ui_dashboard/app.py

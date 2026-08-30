@@ -72,6 +72,21 @@ class TheftDetectorTests(TestCase):
         result = self.detector.evaluate(perception(self.unknown, change=recovery), now=1)
         self.assertEqual(result["new_event"]["event_type"], "inventory_recovered")
 
+    def test_adding_a_different_item_does_not_cancel_pending_theft(self):
+        self.detector.evaluate(perception(self.unknown, DROP, DROP), now=0)
+        unrelated_addition = {
+            "added_items": {"laptop": 1},
+            "current_counts": {"bottle": 1, "laptop": 1},
+        }
+
+        pending = self.detector.evaluate(
+            perception(self.unknown, change=unrelated_addition), now=1
+        )
+        confirmed = self.detector.evaluate(perception(self.unknown), now=3.1)
+
+        self.assertEqual(pending["state"], "PENDING")
+        self.assertEqual(confirmed["new_event"]["event_type"], "suspected_theft")
+
     def test_drop_without_person_is_not_confirmed_as_theft(self):
         self.detector.evaluate(perception(drop=DROP, change=DROP), now=0)
         result = self.detector.evaluate(perception(), now=3.1)

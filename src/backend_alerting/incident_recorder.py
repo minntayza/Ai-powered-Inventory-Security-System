@@ -38,6 +38,7 @@ class IncidentRecorder:
         self.retention_days = max(1, int(retention_days))
         self.enabled = bool(enabled)
         self._buffer: Deque[EncodedFrame] = deque()
+        self._buffer_bytes = 0
         self._active: Dict[str, Dict] = {}
         self._futures: Dict[Future, str] = {}
         self._executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="incident-video")
@@ -55,9 +56,11 @@ class IncidentRecorder:
             return
         item = (now, encoded.tobytes())
         self._buffer.append(item)
+        self._buffer_bytes += len(item[1])
         cutoff = now - self.pre_event_seconds
         while self._buffer and self._buffer[0][0] < cutoff:
-            self._buffer.popleft()
+            _timestamp, payload = self._buffer.popleft()
+            self._buffer_bytes -= len(payload)
         completed = []
         for event_id, job in self._active.items():
             job["frames"].append(item)
@@ -127,10 +130,11 @@ class IncidentRecorder:
         return str(output_path)
 
     def buffer_megabytes(self) -> float:
-        return round(sum(len(payload) for _timestamp, payload in self._buffer) / 1_048_576, 2)
+        return round(self._buffer_bytes / 1_048_576, 2)
 
     def reset_buffer(self) -> None:
         self._buffer.clear()
+        self._buffer_bytes = 0
 
     def cleanup(self) -> None:
         cutoff = time.time() - self.retention_days * 86400

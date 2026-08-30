@@ -293,7 +293,7 @@ class SystemController:
                             counter.disarm()
                         monitoring = self._monitoring_snapshot(perception)
                 self._collect_completed_videos()
-                active_device = self.state.snapshot().get("device_info") or {}
+                active_device = self.state.get("device_info", {}) or {}
                 yolo = getattr(self.tracker, "yolo_detector", None)
                 actual_device = getattr(yolo, "device", active_device.get("selected"))
                 if active_device.get("selected") != actual_device:
@@ -393,8 +393,7 @@ class SystemController:
         summary: Optional[str] = None,
         error: Optional[str] = None,
     ) -> None:
-        snapshot = self.state.snapshot()
-        security = snapshot.get("security") or {}
+        security = self.state.get("security", {}) or {}
         current = security.get("last_event")
         if not current or current.get("event_id") != event_id:
             return
@@ -413,8 +412,7 @@ class SystemController:
         self.audit.log_alert_attempt(
             event["event_id"], "telegram", result["status"], result.get("detail", "")
         )
-        snapshot = self.state.snapshot()
-        security = snapshot["security"]
+        security = self.state.get("security", {})
         current = security.get("last_event")
         if current and current.get("event_id") == event["event_id"]:
             current["telegram_status"] = result["status"]
@@ -425,8 +423,7 @@ class SystemController:
         for result in self.incident_recorder.poll_completed():
             if result.get("path"):
                 self.audit.update_event(result["event_id"], video_path=result["path"])
-                snapshot = self.state.snapshot()
-                security = snapshot.get("security", {})
+                security = self.state.get("security", {})
                 current = security.get("last_event")
                 if current and current.get("event_id") == result["event_id"]:
                     current["video_path"] = result["path"]
@@ -438,7 +435,7 @@ class SystemController:
                 )
 
     def acknowledge(self, event_id: Optional[str] = None) -> None:
-        security = self.state.snapshot()["security"]
+        security = self.state.get("security", {})
         event = security.get("last_event")
         target = event_id or (event or {}).get("event_id")
         if target:
@@ -634,7 +631,7 @@ class SystemController:
     def _performance_snapshot(self) -> Dict:
         result = self.performance.snapshot()
         result["video_buffer_mb"] = self.incident_recorder.buffer_megabytes()
-        device = self.state.snapshot().get("device_info") or {}
+        device = self.state.get("device_info", {}) or {}
         result["active_device"] = device.get("selected", "initializing")
         return result
 
@@ -688,8 +685,17 @@ class SystemController:
         )
         temporary.replace(self._settings_path)
 
-    def snapshot(self) -> Dict:
-        return self.state.snapshot()
+    def snapshot(
+        self, *, include_frame: bool = True, include_perception: bool = True
+    ) -> Dict:
+        return self.state.snapshot(
+            include_frame=include_frame,
+            include_perception=include_perception,
+        )
+
+    def latest_frame(self):
+        """Return only the latest processed frame for on-demand VLM analysis."""
+        return self.state.get("frame")
 
     def camera_preview(self) -> Dict:
         """Overlay the latest AI result on the newest frame without blocking inference."""

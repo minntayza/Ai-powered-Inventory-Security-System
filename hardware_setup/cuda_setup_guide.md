@@ -35,11 +35,16 @@ Do not copy `.venv` from another computer. CPU and CUDA packages are machine-spe
 
 ```powershell
 .\.venv\Scripts\Activate.ps1
-python scripts\verify_environment.py
+python scripts\verify_environment.py --expected-device cuda
 python -c "import torch; print(torch.__version__); print(torch.cuda.is_available()); print(torch.cuda.get_device_name(0) if torch.cuda.is_available() else 'CPU fallback')"
 ```
 
 The second line should print `True` and the NVIDIA GPU name. The dashboard also reports CUDA reserved/total memory and warns when pressure is high.
+
+The verifier performs a real CUDA tensor operation and checks that both YOLO and
+Florence resolve to `cuda:0`. DeepFace uses TensorFlow; TensorFlow 2.11 and newer
+do not support NVIDIA GPU execution on native Windows, so DeepFace remains on CPU.
+Use WSL2 if GPU-accelerated TensorFlow face recognition is required.
 
 ## 4. Start the dashboard
 

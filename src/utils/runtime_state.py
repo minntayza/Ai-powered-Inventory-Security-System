@@ -35,15 +35,30 @@ class RuntimeState:
         with self._lock:
             self._state.update(values)
 
-    def snapshot(self) -> Dict[str, Any]:
+    def snapshot(
+        self, *, include_frame: bool = True, include_perception: bool = True
+    ) -> Dict[str, Any]:
+        """Return an isolated state copy, optionally excluding expensive payloads."""
         with self._lock:
-            result = dict(self._state)
-            result["frame"] = (
-                None if self._state["frame"] is None else self._state["frame"].copy()
-            )
-            for key in ("perception", "security", "monitoring", "source", "performance"):
-                result[key] = deepcopy(self._state[key])
+            result = {}
+            for key, value in self._state.items():
+                if key == "frame":
+                    if include_frame:
+                        result[key] = None if value is None else value.copy()
+                elif key == "perception":
+                    if include_perception:
+                        result[key] = deepcopy(value)
+                else:
+                    result[key] = deepcopy(value)
             return result
+
+    def get(self, key: str, default: Any = None) -> Any:
+        """Return one isolated value without copying unrelated video/state data."""
+        with self._lock:
+            value = self._state.get(key, default)
+            if key == "frame" and value is not None:
+                return value.copy()
+            return deepcopy(value)
 
     def perception_snapshot(self) -> Any:
         """Copy perception metadata without also copying the stored video frame."""

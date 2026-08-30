@@ -103,6 +103,7 @@ class FrameCapture:
         if self._thread and self._thread.is_alive():
             self._thread.join(timeout=timeout)
         self._release()
+        self._set_health(False)
 
     def _release(self) -> None:
         capture, self._capture = self._capture, None
@@ -147,22 +148,32 @@ class VideoFileCapture:
         return self
 
     def _run(self) -> None:
-        while not self._stop.is_set() and self._capture is not None:
-            started = time.perf_counter()
-            ok, frame = self._capture.read()
-            if not ok or frame is None:
-                if self.loop:
-                    self._capture.set(cv2.CAP_PROP_POS_FRAMES, 0)
-                    continue
+        try:
+            while not self._stop.is_set() and self._capture is not None:
+                started = time.perf_counter()
+                ok, frame = self._capture.read()
+                if not ok or frame is None:
+                    with self._lock:
+                        # A valid looping replay remains a healthy source while
+                        # seeking back to its first frame. A file that never
+                        # yielded a frame is unhealthy.
+                        self._healthy = bool(self.loop and self._frame_id)
+                    if self.loop:
+                        self._capture.set(cv2.CAP_PROP_POS_FRAMES, 0)
+                        # Broken or empty replay files must not consume an
+                        # entire CPU core while repeatedly seeking to frame 0.
+                        self._stop.wait(self._period)
+                        continue
+                    break
                 with self._lock:
-                    self._healthy = False
-                break
+                    self._frame = frame
+                    self._frame_id += 1
+                    self._healthy = True
+                self._stop.wait(max(0.0, self._period - (time.perf_counter() - started)))
+        finally:
+            self._release()
             with self._lock:
-                self._frame = frame
-                self._frame_id += 1
-                self._healthy = True
-            self._stop.wait(max(0.0, self._period - (time.perf_counter() - started)))
-        self._release()
+                self._healthy = False
 
     def read(self) -> tuple[bool, Optional[np.ndarray], int]:
         with self._lock:
@@ -174,6 +185,8 @@ class VideoFileCapture:
         if self._thread and self._thread.is_alive():
             self._thread.join(timeout=timeout)
         self._release()
+        with self._lock:
+            self._healthy = False
 
     def _release(self) -> None:
         capture, self._capture = self._capture, None

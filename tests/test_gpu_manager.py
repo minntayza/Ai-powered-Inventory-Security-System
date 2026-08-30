@@ -27,6 +27,11 @@ class DeviceSelectionTests(TestCase):
     def test_explicit_cuda_falls_back_to_cpu(self, _available):
         self.assertEqual(resolve_torch_device("cuda:0"), "cpu")
 
+    @mock.patch("torch.cuda.is_available", return_value=False)
+    @mock.patch("torch.backends.mps.is_available", return_value=True)
+    def test_explicit_cuda_falls_back_to_mps_when_available(self, _mps, _cuda):
+        self.assertEqual(resolve_torch_device("cuda:0"), "mps")
+
     @mock.patch("torch.backends.mps.is_available", return_value=False)
     def test_explicit_mps_falls_back_to_cpu(self, _available):
         self.assertEqual(resolve_torch_device("mps"), "cpu")

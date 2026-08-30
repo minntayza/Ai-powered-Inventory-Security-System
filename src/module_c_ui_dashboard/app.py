@@ -80,7 +80,10 @@ st.markdown(
 
 with st.sidebar:
     st.header("⚙️ Controls")
-    monitoring = controller.snapshot().get("monitoring", {})
+    sidebar_snapshot = controller.snapshot(
+        include_frame=False, include_perception=False
+    )
+    monitoring = sidebar_snapshot.get("monitoring", {})
     mode = monitoring.get("mode", "DISARMED")
     st.caption(f"Status: **{mode}**")
     current_counts = monitoring.get("current_counts", {})
@@ -155,7 +158,7 @@ with st.sidebar:
             st.rerun()
 
     with st.expander("📹 Camera / Replay Source"):
-        source = controller.snapshot().get("source", {})
+        source = sidebar_snapshot.get("source", {})
         st.caption(f"Active Source: **{source.get('label', 'Live camera')}**")
         replay_file = st.file_uploader(
             "Demo recording", type=["mp4", "avi", "mov"], key="replay-video"
@@ -236,7 +239,9 @@ left, right = st.columns([3, 2])
 with left:
     @st.fragment(run_every=0.5)
     def operational_status_panel() -> None:
-        current = controller.snapshot()
+        current = controller.snapshot(
+            include_frame=False, include_perception=False
+        )
         render_alert(current, controller)
         render_operational_status(current)
 
@@ -252,7 +257,7 @@ with left:
 
     @st.fragment(run_every=0.5)
     def operational_details_panel() -> None:
-        render_operational_details(controller.snapshot())
+        render_operational_details(controller.snapshot(include_frame=False))
 
     operational_details_panel()
 with right:

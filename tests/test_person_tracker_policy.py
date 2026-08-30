@@ -44,3 +44,31 @@ class PersonTrackerPolicyTests(TestCase):
         self.assertEqual(result["inventory"]["contextual_counts"], {"chair": 1})
         bottle = next(item for item in result["inventory"]["items"] if item["label"] == "bottle")
         self.assertFalse(bottle["in_zone"])
+
+    def test_one_face_cannot_authorize_multiple_overlapping_people(self):
+        tracker = PersonTracker(
+            yolo_detector=FakeYolo(),
+            face_detector=FakeFace(),
+            inventory_counter=InventoryCounter(window_size=1, warmup_frames=1, confirmation_frames=1),
+            contextual_counter=InventoryCounter(window_size=1, warmup_frames=1, confirmation_frames=1),
+        )
+        people = [
+            {"track_id": 1, "bbox": [0, 0, 80, 100], "confidence": 0.9},
+            {"track_id": 2, "bbox": [20, 0, 100, 100], "confidence": 0.9},
+        ]
+        faces = [{
+            "bbox": [40, 20, 20, 20],
+            "name": "Alice",
+            "authorized": True,
+            "authorization_state": "authorized",
+            "confidence": 0.95,
+        }]
+        try:
+            correlated = tracker._correlate_persons_faces(people, faces)
+        finally:
+            tracker.shutdown()
+
+        self.assertEqual(
+            sum(person["authorization_state"] == "authorized" for person in correlated),
+            1,
+        )

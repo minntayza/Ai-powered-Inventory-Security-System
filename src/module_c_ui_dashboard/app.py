@@ -17,6 +17,7 @@ from src.backend_alerting.event_loop import SystemController
 from src.module_b_vlm_layer.tts_engine import TTSEngine
 from src.module_b_vlm_layer.vlm_engine import FlorenceEngine
 from src.module_b_vlm_layer.vqa_pipeline import VQAPipeline
+from src.module_b_vlm_layer.voice_input import VoiceQuestionTranscriber
 
 from src.module_c_ui_dashboard.alert_ui import render_alert
 from src.module_c_ui_dashboard.cognitive_assistant import render_assistant
@@ -32,7 +33,9 @@ def get_controller() -> SystemController:
 
 
 @st.cache_resource
-def get_vqa(_controller: SystemController) -> tuple[VQAPipeline, TTSEngine]:
+def get_vqa(
+    _controller: SystemController,
+) -> tuple[VQAPipeline, TTSEngine, VoiceQuestionTranscriber]:
     config = _controller.config["models"]["vlm"]
     engine = FlorenceEngine(
         model_name=config.get("model_name", "microsoft/Florence-2-base-ft"),
@@ -40,11 +43,13 @@ def get_vqa(_controller: SystemController) -> tuple[VQAPipeline, TTSEngine]:
         max_new_tokens=int(config.get("max_new_tokens", 128)),
         trust_remote_code=bool(config.get("trust_remote_code", True)),
     )
-    return VQAPipeline(engine), TTSEngine(_controller.audio)
+    vqa = VQAPipeline(engine)
+    _controller.set_incident_summarizer(vqa.summarize_incident)
+    return vqa, TTSEngine(_controller.audio), VoiceQuestionTranscriber()
 
 
 controller = get_controller()
-vqa, tts = get_vqa(controller)
+vqa, tts, voice = get_vqa(controller)
 
 st.title("AI-Powered Inventory Security System")
 
@@ -180,7 +185,7 @@ with left:
 
     live_operational_panel()
 with right:
-    render_assistant(controller, vqa, tts)
+    render_assistant(controller, vqa, tts, voice)
     st.subheader("Recent activity")
     events = controller.recent_events(20)
     if events:

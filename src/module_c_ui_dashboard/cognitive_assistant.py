@@ -2,13 +2,36 @@
 
 from __future__ import annotations
 
+import hashlib
 from pathlib import Path
 
 import cv2
 import streamlit as st
 
 
-def render_assistant(controller, vqa, tts) -> None:
+def transcribe_voice_recording(
+    recording, transcriber, coordinator, recognizer=None
+) -> dict:
+    """Convert a Streamlit audio recording into a dashboard question."""
+    payload = recording.getvalue() if recording is not None else b""
+    return transcriber.transcribe(
+        payload, recognizer=recognizer, coordinator=coordinator
+    )
+
+
+def select_assistant_question(typed_question, voice_result, action):
+    """Choose one user question without allowing voice to override typed text."""
+    voice_question = (
+        voice_result.get("question") if voice_result and voice_result.get("ok") else None
+    )
+    return typed_question or voice_question or {
+        "describe": "Describe the scene in detail",
+        "ocr": "Read all visible text",
+        "summary": "Summarize this incident",
+    }.get(action)
+
+
+def render_assistant(controller, vqa, tts, transcriber) -> None:
     st.subheader("Visual assistant")
     events = [event for event in controller.recent_events(20) if event.get("snapshot_path")]
     source_options = {"Live camera": None}
@@ -39,12 +62,24 @@ def render_assistant(controller, vqa, tts) -> None:
         "Summarize incident", disabled=selected is None, use_container_width=True
     ):
         action = "summary"
+    recording = st.audio_input(
+        "Ask by voice",
+        disabled=not controller.audio.microphone_available,
+        key="voice-question",
+    )
+    voice_result = None
+    if recording is not None:
+        digest = hashlib.sha256(recording.getvalue()).hexdigest()
+        if st.session_state.get("last_voice_digest") != digest:
+            st.session_state.last_voice_digest = digest
+            with st.spinner("Transcribing locally with Whisper..."):
+                voice_result = transcribe_voice_recording(
+                    recording, transcriber, controller.audio
+                )
+            if not voice_result["ok"]:
+                st.warning(f"Voice input unavailable: {voice_result['error']}")
     typed_question = st.chat_input("Ask what is visible in the selected image")
-    question = typed_question or {
-        "describe": "Describe the scene in detail",
-        "ocr": "Read all visible text",
-        "summary": "Summarize this incident",
-    }.get(action)
+    question = select_assistant_question(typed_question, voice_result, action)
     if not question:
         return
     st.session_state.chat_messages.append({"role": "user", "content": question})

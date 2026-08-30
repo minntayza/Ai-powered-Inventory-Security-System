@@ -100,6 +100,9 @@ class AuditLogger:
                 "zone_region": "TEXT",
                 "source_type": "TEXT NOT NULL DEFAULT 'live'",
                 "video_path": "TEXT",
+                "ai_summary": "TEXT",
+                "summary_status": "TEXT NOT NULL DEFAULT 'not_requested'",
+                "summary_error": "TEXT",
             }
             for column, definition in migrations.items():
                 if column not in existing:
@@ -162,7 +165,16 @@ class AuditLogger:
         return record
 
     def update_event(self, event_id: str, **values: object) -> None:
-        allowed = {"telegram_status", "acknowledged", "snapshot_path", "video_path", "status"}
+        allowed = {
+            "telegram_status",
+            "acknowledged",
+            "snapshot_path",
+            "video_path",
+            "status",
+            "ai_summary",
+            "summary_status",
+            "summary_error",
+        }
         updates = {key: value for key, value in values.items() if key in allowed}
         if not updates:
             return
@@ -173,6 +185,22 @@ class AuditLogger:
                 f"UPDATE events SET {columns} WHERE event_id = ?",
                 [*parameters, event_id],
             )
+
+    def update_ai_summary(
+        self,
+        event_id: str,
+        *,
+        status: str,
+        summary: Optional[str] = None,
+        error: Optional[str] = None,
+    ) -> None:
+        """Persist the lifecycle and result of an automatic incident summary."""
+        self.update_event(
+            event_id,
+            summary_status=status,
+            ai_summary=summary,
+            summary_error=error,
+        )
 
     def log_alert_attempt(self, event_id: str, channel: str, status: str, detail: str = "") -> None:
         with self._lock, self._connection() as connection:

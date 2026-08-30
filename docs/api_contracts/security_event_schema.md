@@ -8,6 +8,12 @@ Events also include baseline counts, actor candidates, an optional primary actor
 a deterministic decision reason, normalized zone, source type, and optional video
 path. JSON fields are encoded in SQLite and decoded by `recent_events`.
 
+Confirmed events can also carry an automatic Florence-2 report lifecycle:
+`summary_status` (`not_requested`, `pending`, `completed`, or `failed`), the
+persisted `ai_summary`, and an optional `summary_error`. Summary generation runs
+after the deterministic decision and cannot change authorization, event type, or
+alert activation.
+
 Supported event types are `suspected_theft`, `authorized_removal`,
 `inventory_recovered`, and `unattributed_inventory_change`. Only a confirmed
 `suspected_theft` from a live source activates external alerts. Replay events are

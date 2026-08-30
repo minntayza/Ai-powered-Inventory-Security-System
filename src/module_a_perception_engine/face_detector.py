@@ -3,6 +3,7 @@
 import os
 import cv2
 import numpy as np
+import logging
 import time
 from deepface import DeepFace
 from typing import List, Dict
@@ -32,9 +33,17 @@ class FaceDetector:
 
         print(f"Face Detector initialized: {len(self.known_names)} known persons")
 
+    def health(self) -> Dict[str, object]:
+        """Return whether the most recent recognition attempt completed."""
+        return {
+            "healthy": getattr(self, "last_error", None) is None,
+            "last_error": getattr(self, "last_error", None),
+        }
+
     def detect_faces(self, frame: np.ndarray) -> List[Dict]:
         started = time.perf_counter()
         results = []
+        self.last_error = None
 
         try:
             face_objs = DeepFace.extract_faces(
@@ -80,8 +89,11 @@ class FaceDetector:
                         "is_real": True
                     })
 
-        except Exception as e:
-            print(f"Face detection error: {e}")
+        except Exception as exc:
+            self.last_error = str(exc)
+            logging.getLogger("inventory_security.face_detector").error(
+                "Face detection failed: %s", exc
+            )
 
         self.last_inference_ms = (time.perf_counter() - started) * 1000
         return results

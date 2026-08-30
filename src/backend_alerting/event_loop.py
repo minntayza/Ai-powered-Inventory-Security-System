@@ -29,11 +29,18 @@ from .theft_detector import TheftDetector
 class SystemController:
     """Own long-lived application resources and publish dashboard-safe snapshots."""
 
-    def __init__(self, config_dir: str = "configs", tracker=None, capture=None) -> None:
+    def __init__(
+        self,
+        config_dir: str = "configs",
+        tracker=None,
+        capture=None,
+        incident_summarizer=None,
+    ) -> None:
         self.config = load_app_config(config_dir)
         self.logger = configure_logging()
         self.state = RuntimeState()
         self.audio = AudioCoordinator()
+        self._incident_summarizer = incident_summarizer
         self.tracker = tracker
         self.capture = capture or FrameCapture(**self.config["camera"])
         self._engine_lock = threading.RLock()
@@ -155,6 +162,11 @@ class SystemController:
             ),
         )
 
+    def set_incident_summarizer(self, summarizer) -> "SystemController":
+        """Register the callable used for automatic confirmed-incident reports."""
+        self._incident_summarizer = summarizer
+        return self
+
     def start(self) -> "SystemController":
         if self._thread and self._thread.is_alive():
             return self
@@ -199,7 +211,13 @@ class SystemController:
                     self.performance.skip(frame_id - previous_frame_id - 1)
                 processing_started = time.perf_counter()
                 with self._engine_lock:
-                    perception = self.tracker.process_frame(frame)
+                    try:
+                        perception = self.tracker.process_frame(frame)
+                    except Exception as exc:
+                        self.logger.exception("Frame processing failed; retrying: %s", exc)
+                        self.state.update(last_error=f"Perception degraded: {exc}")
+                        self._stop.wait(0.05)
+                        continue
                     perception["frame_id"] = frame_id
                     perception["camera_healthy"] = healthy
                     annotated = self.tracker.draw_tracking(frame, perception)
@@ -218,6 +236,10 @@ class SystemController:
                     self.performance.record("yolo_ms", getattr(yolo, "last_inference_ms", 0.0))
                 if face is not None and getattr(face, "last_inference_ms", 0.0):
                     self.performance.record("face_ms", face.last_inference_ms)
+                component_health = {}
+                if face is not None and hasattr(face, "health"):
+                    component_health["face"] = face.health()
+                summary_job = None
                 event = decision.get("new_event")
                 if event:
                     event["source_type"] = self._source_type
@@ -225,6 +247,16 @@ class SystemController:
                         event["telegram_status"] = "disabled"
                     confirmed = event["status"] == "confirmed"
                     record = self.audit.log_event(event, annotated if confirmed else None)
+                    if confirmed and self._incident_summarizer is not None:
+                        record.update(
+                            summary_status="pending",
+                            ai_summary=None,
+                            summary_error=None,
+                        )
+                        self.audit.update_ai_summary(
+                            record["event_id"], status="pending"
+                        )
+                        summary_job = (deepcopy(record), annotated.copy())
                     self.theft_detector.last_event = deepcopy(record)
                     decision["last_event"] = deepcopy(record)
                     decision["new_event"] = deepcopy(record)
@@ -251,8 +283,17 @@ class SystemController:
                     monitoring=monitoring,
                     performance=self._performance_snapshot(),
                     device_info=active_device,
+                    component_health=component_health,
                     last_error=None,
                 )
+                if summary_job is not None:
+                    summary_event, summary_frame = summary_job
+                    threading.Thread(
+                        target=self._summarize_incident,
+                        args=(summary_event, summary_frame),
+                        name=f"summary-{summary_event['event_id'][:8]}",
+                        daemon=True,
+                    ).start()
         except Exception as exc:
             self.logger.exception("Monitoring engine stopped: %s", exc)
             self.state.update(last_error=str(exc))
@@ -290,6 +331,59 @@ class SystemController:
         if "error" in result:
             raise result["error"]
         return result["tracker"]
+
+    def _summarize_incident(self, event: Dict, frame) -> None:
+        try:
+            result = self._incident_summarizer(frame, event)
+            if isinstance(result, dict):
+                if not result.get("ok"):
+                    raise RuntimeError(result.get("error") or "Incident summary failed")
+                summary = str(result.get("answer", "")).strip()
+                self.record_vlm_latency(float(result.get("latency_ms", 0.0)))
+            else:
+                summary = str(result).strip()
+            if not summary:
+                raise RuntimeError("Incident summary was empty")
+            self.audit.update_ai_summary(
+                event["event_id"], status="completed", summary=summary
+            )
+            self._publish_incident_summary(
+                event["event_id"],
+                status="completed",
+                summary=summary,
+            )
+        except Exception as exc:
+            self.logger.exception("Automatic incident summary failed: %s", exc)
+            self.audit.update_ai_summary(
+                event["event_id"], status="failed", error=str(exc)
+            )
+            self._publish_incident_summary(
+                event["event_id"],
+                status="failed",
+                error=str(exc),
+            )
+
+    def _publish_incident_summary(
+        self,
+        event_id: str,
+        *,
+        status: str,
+        summary: Optional[str] = None,
+        error: Optional[str] = None,
+    ) -> None:
+        snapshot = self.state.snapshot()
+        security = snapshot.get("security") or {}
+        current = security.get("last_event")
+        if not current or current.get("event_id") != event_id:
+            return
+        current.update(
+            summary_status=status,
+            ai_summary=summary,
+            summary_error=error,
+        )
+        security["last_event"] = current
+        self.theft_detector.last_event = deepcopy(current)
+        self.state.update(security=security)
 
     def _notify(self, event: Dict) -> None:
         result = self.telegram.send_event(event)

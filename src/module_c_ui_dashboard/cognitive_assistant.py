@@ -32,16 +32,16 @@ def select_assistant_question(typed_question, voice_result, action):
 
 
 def render_assistant(controller, vqa, tts, transcriber) -> None:
-    st.subheader("Visual assistant")
+    st.markdown("### 🤖 Cognitive AI Assistant (Florence-2)")
     events = [event for event in controller.recent_events(20) if event.get("snapshot_path")]
-    source_options = {"Live camera": None}
+    source_options = {"📷 Live Camera View": None}
     source_options.update(
         {
-            f"{event['timestamp']} - {event['event_type']}": event
+            f"🚨 {event['timestamp']} - {event['event_type']}": event
             for event in events
         }
     )
-    selected_label = st.selectbox("Image source", list(source_options))
+    selected_label = st.selectbox("Select Target Frame for AI Inspection", list(source_options))
     selected = source_options[selected_label]
     if selected and selected.get("video_path"):
         st.video(selected["video_path"])
@@ -54,16 +54,16 @@ def render_assistant(controller, vqa, tts, transcriber) -> None:
 
     actions = st.columns(3)
     action = None
-    if actions[0].button("Describe scene", use_container_width=True):
+    if actions[0].button("🔍 Describe Scene", use_container_width=True):
         action = "describe"
-    if actions[1].button("Read text", use_container_width=True):
+    if actions[1].button("🔤 Read Text", use_container_width=True):
         action = "ocr"
     if actions[2].button(
-        "Summarize incident", disabled=selected is None, use_container_width=True
+        "📋 Summarize Incident", disabled=selected is None, use_container_width=True
     ):
         action = "summary"
     recording = st.audio_input(
-        "Ask by voice",
+        "🎙️ Ask by voice",
         disabled=not controller.audio.microphone_available,
         key="voice-question",
     )
@@ -78,7 +78,7 @@ def render_assistant(controller, vqa, tts, transcriber) -> None:
                 )
             if not voice_result["ok"]:
                 st.warning(f"Voice input unavailable: {voice_result['error']}")
-    typed_question = st.chat_input("Ask what is visible in the selected image")
+    typed_question = st.chat_input("Ask what is visible in the selected image…")
     question = select_assistant_question(typed_question, voice_result, action)
     if not question:
         return
@@ -91,7 +91,7 @@ def render_assistant(controller, vqa, tts, transcriber) -> None:
         path = Path(selected["snapshot_path"])
         image = cv2.imread(str(path)) if path.is_file() else None
         source_id = selected["event_id"]
-    with st.spinner("Florence-2 is examining the image..."):
+    with st.spinner("🧠 Florence-2 VLM is analyzing frame..."):
         if action == "summary" and selected is not None:
             response = vqa.summarize_incident(image, selected)
         else:

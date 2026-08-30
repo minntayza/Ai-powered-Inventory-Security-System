@@ -1,0 +1,14 @@
+Timestamp,Event Type,Inventory Count,Person Detected,ArUco Detected,Details,Image Path
+2026-08-25 13:18:57,THEFT_ALERT,8,True,False,THEFT DETECTED! 2 item(s) removed by unauthorized person.,N/A
+2026-08-25 13:19:49,THEFT_ALERT,8,True,False,THEFT DETECTED! 2 item(s) removed by unauthorized person.,N/A
+2026-08-25 19:24:21,THEFT_ALERT,8,True,False,THEFT DETECTED! 2 item(s) removed by unauthorized person.,N/A
+2026-08-25 19:25:37,THEFT_ALERT,8,True,False,THEFT DETECTED! 2 item(s) removed by unauthorized person.,N/A
+2026-08-25 19:37:08,THEFT_ALERT,8,True,False,THEFT DETECTED! 2 item(s) removed by unauthorized person.,N/A
+2026-08-25 19:39:33,THEFT_ALERT,8,True,False,THEFT DETECTED! 2 item(s) removed by unauthorized person.,N/A
+2026-08-25 19:43:00,THEFT_ALERT,8,True,False,THEFT DETECTED! 2 item(s) removed by unauthorized person.,N/A
+2026-08-25 19:45:23,THEFT_ALERT,8,True,False,THEFT DETECTED! 2 item(s) removed by unauthorized person.,N/A
+2026-08-25 19:46:29,THEFT_ALERT,8,True,False,THEFT DETECTED! 2 item(s) removed by unauthorized person.,N/A
+2026-08-25 19:49:13,THEFT_ALERT,8,True,False,THEFT DETECTED! 2 item(s) removed by unauthorized person.,N/A
+2026-08-28 10:46:09,THEFT_ALERT,8,True,False,THEFT DETECTED! 2 item(s) removed by unauthorized person.,N/A
+2026-08-28 10:51:56,THEFT_ALERT,8,True,False,THEFT DETECTED! 2 item(s) removed by unauthorized person.,N/A
+2026-08-28 10:56:58,THEFT_ALERT,8,True,False,THEFT DETECTED! 2 item(s) removed by unauthorized person.,N/A

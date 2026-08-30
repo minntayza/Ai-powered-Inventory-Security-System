@@ -46,8 +46,10 @@ class AlertUiTests(TestCase):
 
         render_alert(snapshot, controller=object())
 
-        css = streamlit.markdown.call_args.args[0]
-        self.assertIn("background-color", css)
+        rendered_markdown = "\n".join(
+            call.args[0] for call in streamlit.markdown.call_args_list
+        )
+        self.assertIn("background-color", rendered_markdown)
 
     @mock.patch("src.module_c_ui_dashboard.alert_ui.st")
     def test_confirmed_alert_shows_telegram_delivery_status(self, streamlit):
@@ -66,8 +68,10 @@ class AlertUiTests(TestCase):
 
         render_alert(snapshot, controller=object())
 
-        captions = [call.args[0] for call in streamlit.caption.call_args_list]
-        self.assertIn("Telegram delivery: sent", captions)
+        rendered_markdown = "\n".join(
+            call.args[0] for call in streamlit.markdown.call_args_list
+        )
+        self.assertIn("Telegram: sent", rendered_markdown)
 
     @mock.patch("src.module_c_ui_dashboard.alert_ui.st")
     def test_confirmed_alert_shows_persisted_ai_incident_report(self, streamlit):

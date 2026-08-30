@@ -28,9 +28,8 @@ ITEM_ICONS = {
 
 
 def status_badge(label: str, healthy: bool) -> None:
-    icon = "🟢" if healthy else "🔴"
-    bg_color = "#d1fae5" if healthy else "#fee2e2"
-    text_color = "#065f46" if healthy else "#991b1b"
+    bg_color = "#064e3b" if healthy else "#4c1d24"
+    text_color = "#ecfdf5" if healthy else "#fff1f2"
     border_color = "#34d399" if healthy else "#f87171"
 
     st.markdown(
@@ -38,18 +37,37 @@ def status_badge(label: str, healthy: bool) -> None:
         <div style="
             background-color: {bg_color};
             border: 1px solid {border_color};
-            border-radius: 6px;
-            padding: 6px 10px;
+            box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+            border-radius: 10px;
+            box-sizing: border-box;
+            width: 100%;
+            min-height: 48px;
+            padding: 9px 12px;
             font-size: 13px;
             font-weight: 700;
             color: {text_color} !important;
             display: flex;
             align-items: center;
-            gap: 6px;
+            gap: 9px;
             margin-bottom: 4px;
+            overflow: hidden;
+            white-space: nowrap;
         ">
-            <span>{icon}</span>
-            <span style="color: {text_color} !important;">{label}</span>
+            <span aria-hidden="true" style="
+                flex: 0 0 auto;
+                width: 12px;
+                height: 12px;
+                border-radius: 50%;
+                background: {border_color};
+                box-shadow: 0 0 0 4px {border_color}22;
+            "></span>
+            <span style="
+                min-width: 0;
+                overflow: hidden;
+                color: {text_color} !important;
+                text-overflow: ellipsis;
+                white-space: nowrap;
+            ">{label}</span>
         </div>
         """,
         unsafe_allow_html=True,

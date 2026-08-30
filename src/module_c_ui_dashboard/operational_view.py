@@ -88,7 +88,7 @@ def render_inventory_status(current_counts: dict, baseline_counts: dict) -> None
 def render_operational_status(snapshot: dict) -> None:
     if snapshot.get("source", {}).get("type") == "replay":
         st.warning("⚠️ SIMULATION MODE — siren and Telegram notifications are disabled.")
-    status_columns = st.columns(4)
+    status_columns = st.columns(4, gap="medium")
     with status_columns[0]:
         status_badge("Engine", bool(snapshot.get("running")))
     with status_columns[1]:
@@ -102,7 +102,7 @@ def render_operational_status(snapshot: dict) -> None:
     with status_columns[3]:
         sec_state = snapshot.get("security", {}).get("state", "UNKNOWN")
         sec_healthy = sec_state not in ("INCIDENT", "UNKNOWN")
-        status_badge(f"Security: {sec_state}", sec_healthy)
+        status_badge(f"Security · {sec_state}", sec_healthy)
 
     monitoring = snapshot.get("monitoring", {})
     mode = monitoring.get("mode", "DISARMED")

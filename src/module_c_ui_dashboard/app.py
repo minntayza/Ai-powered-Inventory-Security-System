@@ -17,7 +17,6 @@ from src.backend_alerting.event_loop import SystemController
 from src.module_b_vlm_layer.tts_engine import TTSEngine
 from src.module_b_vlm_layer.vlm_engine import FlorenceEngine
 from src.module_b_vlm_layer.vqa_pipeline import VQAPipeline
-from src.module_b_vlm_layer.voice_input import VoiceQuestionTranscriber
 
 from src.module_c_ui_dashboard.alert_ui import render_alert
 from src.module_c_ui_dashboard.cognitive_assistant import render_assistant
@@ -30,7 +29,64 @@ from src.module_c_ui_dashboard.operational_view import (
 
 st.set_page_config(page_title="Inventory Security", page_icon="🛡️", layout="wide")
 
-
+st.markdown(
+    """
+    <style>
+        .stMainBlockContainer {
+            padding-top: 2rem;
+        }
+        .inventory-hero {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 0.85rem 1.25rem;
+            margin-bottom: 1.2rem;
+            padding: 0.3rem 0 1rem;
+            border-bottom: 1px solid rgba(148, 163, 184, 0.22);
+        }
+        .inventory-hero__copy {
+            min-width: 0;
+        }
+        .inventory-hero__title {
+            font-size: clamp(1.65rem, 3vw, 2.35rem);
+            font-weight: 800;
+            line-height: 1.15;
+            background: linear-gradient(135deg, #38bdf8, #818cf8, #c084fc);
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .inventory-hero__subtitle {
+            margin-top: 0.45rem;
+            color: #94a3b8;
+            font-size: clamp(0.78rem, 1.5vw, 0.95rem);
+            line-height: 1.45;
+        }
+        .inventory-hero__state {
+            flex: 0 0 auto;
+            border: 1px solid rgba(16, 185, 129, 0.35);
+            border-radius: 999px;
+            padding: 0.4rem 0.85rem;
+            background: rgba(16, 185, 129, 0.14);
+            color: #34d399;
+            font-size: 0.72rem;
+            font-weight: 800;
+            letter-spacing: 0.06em;
+            white-space: nowrap;
+        }
+        @media (max-width: 700px) {
+            .stMainBlockContainer {
+                padding-top: 1.25rem;
+            }
+            .inventory-hero {
+                align-items: flex-start;
+            }
+        }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
 
 @st.cache_resource
 def get_controller() -> SystemController:
@@ -40,7 +96,7 @@ def get_controller() -> SystemController:
 @st.cache_resource
 def get_vqa(
     _controller: SystemController,
-) -> tuple[VQAPipeline, TTSEngine, VoiceQuestionTranscriber]:
+) -> tuple[VQAPipeline, TTSEngine]:
     config = _controller.config["models"]["vlm"]
     engine = FlorenceEngine(
         model_name=config.get("model_name", "microsoft/Florence-2-base-ft"),
@@ -50,29 +106,25 @@ def get_vqa(
     )
     vqa = VQAPipeline(engine)
     _controller.set_incident_summarizer(vqa.summarize_incident)
-    return vqa, TTSEngine(_controller.audio), VoiceQuestionTranscriber()
+    return vqa, TTSEngine(_controller.audio)
 
 
 controller = get_controller()
-vqa, tts, voice = get_vqa(controller)
+vqa, tts = get_vqa(controller)
 
-# Header Banner
+# Header banner
 st.markdown(
     """
-    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.2rem; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 0.8rem;">
-        <div>
-            <div style="font-size: 2rem; font-weight: 800; background: linear-gradient(135deg, #38bdf8, #818cf8, #c084fc); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">
+    <div class="inventory-hero">
+        <div class="inventory-hero__copy">
+            <div class="inventory-hero__title">
                 🛡️ AI-Powered Inventory Security System
             </div>
-            <div style="font-size: 0.85rem; color: #94a3b8; margin-top: 2px;">
+            <div class="inventory-hero__subtitle">
                 YOLO Perception • DeepFace Authorization • Deterministic Theft Engine • Florence-2 VLM
             </div>
         </div>
-        <div>
-            <span style="background: rgba(16, 185, 129, 0.15); border: 1px solid rgba(16, 185, 129, 0.3); color: #34d399; font-size: 0.75rem; font-weight: 700; padding: 6px 14px; border-radius: 20px; letter-spacing: 0.5px;">
-                ● SYSTEM ACTIVE
-            </span>
-        </div>
+        <div class="inventory-hero__state">● SYSTEM ACTIVE</div>
     </div>
     """,
     unsafe_allow_html=True,
@@ -235,18 +287,19 @@ with st.sidebar:
     else:
         st.caption("Telegram: disabled")
 
+@st.fragment(run_every=0.5)
+def operational_status_panel() -> None:
+    current = controller.snapshot(
+        include_frame=False, include_perception=False
+    )
+    render_alert(current, controller)
+    render_operational_status(current)
+
+
+operational_status_panel()
+
 left, right = st.columns([3, 2])
 with left:
-    @st.fragment(run_every=0.5)
-    def operational_status_panel() -> None:
-        current = controller.snapshot(
-            include_frame=False, include_perception=False
-        )
-        render_alert(current, controller)
-        render_operational_status(current)
-
-    operational_status_panel()
-
     camera_fps = max(1.0, float(controller.config["camera"].get("fps", 10)))
 
     @st.fragment(run_every=max(0.05, 1.0 / camera_fps))
@@ -261,7 +314,7 @@ with left:
 
     operational_details_panel()
 with right:
-    render_assistant(controller, vqa, tts, voice)
+    render_assistant(controller, vqa, tts)
 
     @st.fragment(run_every=0.5)
     def recent_activity_panel() -> None:

@@ -6,6 +6,10 @@ from src.backend_alerting.telegram_bot import TelegramAlerter
 
 
 class TelegramAlerterTests(TestCase):
+    @mock.patch.dict(
+        "os.environ",
+        {"TELEGRAM_BOT_TOKEN": "", "TELEGRAM_CHAT_ID": ""},
+    )
     def test_authorized_and_suspected_events_are_selected(self):
         alerter = TelegramAlerter(
             enabled=True,

@@ -54,9 +54,19 @@ operations and model-level accelerator failures fall back to CPU. Start the app 
 Configuration lives in `configs/`. The default setup uses laptop webcam index `0`
 and pretrained `yolov8n.pt`. It tracks people and counts classroom-relevant COCO
 objects such as bags, drink containers, chairs, electronics, books, clocks, and
-scissors. Telegram is disabled by default. To enable it, set the two variables
-shown in `.env.example` and change `telegram.enabled` in
-`configs/alert_config.yaml`.
+scissors. Telegram event routing is enabled in the default configuration; set the
+two credentials shown in `.env.example` before starting the dashboard.
+
+Telegram notifications are configured for both authorized removals and suspected
+theft. Copy `.env.example` to `.env`, replace both placeholder values, and then
+start the dashboard. The application loads `.env` automatically; variables already
+set by the launching process take precedence. Authorized notifications include the
+removed inventory and recognized actor but do not activate the siren.
+
+```powershell
+Copy-Item .env.example .env
+notepad .env
+```
 
 Place 5–10 clear enrollment photos per authorized user under:
 
@@ -84,9 +94,10 @@ without either feature.
 Florence uses its supported detailed-caption task for scene/action questions and
 its OCR task for questions about visible text; it is not treated as a chat model.
 
-The dashboard publishes raw webcam frames while the models initialize, and face
-recognition runs on a background worker so it cannot freeze the live feed. Check
-whether YOLO can use the NVIDIA GPU with:
+The dashboard always publishes the newest raw webcam frame as the smooth live
+preview, including while models initialize. AI boxes, counts, and decisions update
+separately at the processed-frame rate, and face recognition runs on a background
+worker. Check whether YOLO can use the NVIDIA GPU with:
 
 ```powershell
 python -c "import torch; print(torch.__version__, torch.cuda.is_available())"
@@ -99,11 +110,26 @@ before enabling the VLM for a live demonstration.
 ### Classroom monitoring workflow
 
 1. Wait for the camera and models to become ready.
-2. Configure the **Monitored zone** around the demonstration desk or shelf.
-3. Arrange protected objects and wait for stable counts.
-4. Click **Set baseline and arm**; alerts are impossible while disarmed.
-5. Pause before intentionally rearranging the scene.
-6. Reset and establish a new baseline when protected inventory changes.
+2. Configure the **Monitored zone** tightly around the demonstration desk or shelf.
+3. Place protected objects in the zone, stop handling them, and step away.
+4. Wait for the stable protected count, then click **Set this count as baseline and arm**.
+5. A stable removal is classified exactly once as authorized, suspected theft, or
+   unattributed. Monitoring then pauses automatically for that baseline discrepancy.
+6. If the item is returned, click **Item returned — resume original baseline**. If
+   the inventory change is intentional, click **Use current count as the new baseline**.
+   Use **Clear baseline and start over** whenever the scene becomes confusing.
+
+The default live-demo timing uses a seven-frame inventory window, two matching
+confirmation frames, and a three-second security grace period. At 3–5 processed
+FPS, a suspected-theft decision normally appears about 4–5 seconds after the item
+leaves the monitored zone. Authorized removals finish as soon as the count settles.
+
+Use a desk/shelf-sized monitored zone for pickup detection. With **Full frame**
+selected, an item carried by a person remains part of the detected inventory until
+it leaves the camera view. The dashboard now shows possible removals while they are
+being stabilized and records both authorized and unknown-person removals live. Do
+not hold an item while establishing the baseline: place it in the zone first and
+wait for the count to settle.
 
 Protected classes are defined under `inventory_policy.protected` in
 `configs/model_config.yaml`. Contextual classes such as chairs, TVs, and clocks

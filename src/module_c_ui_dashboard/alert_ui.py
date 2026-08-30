@@ -28,45 +28,77 @@ def apply_alert_theme() -> None:
 
 def render_alert(snapshot: dict, controller) -> None:
     security = snapshot.get("security", {})
+    if security.get("state") == "PENDING" and security.get("pending"):
+        removed = _removed_summary(security["pending"])
+        st.warning(f"Verifying protected-item removal — {removed}")
+
     event = security.get("last_event")
-    if not event or event.get("status") != "confirmed" or event.get("acknowledged"):
+    if not event or event.get("acknowledged"):
         return
-    apply_alert_theme()
-    removed = ", ".join(
-        f"{name}: {count}" for name, count in event.get("removed_items", {}).items()
-    ) or "unknown item"
-    actor = event.get("primary_actor")
-    actor_str = ""
-    if actor:
-        actor_str = (
-            f"• Suspect: <strong>{actor.get('name', 'Unknown')}</strong> "
-            f"(Track #{actor.get('track_id')}, confidence {actor.get('association_score', 0):.2f})"
+    removed = _removed_summary(event)
+    event_type = event.get("event_type")
+    if event.get("status") == "confirmed":
+        apply_alert_theme()
+    elif event_type == "authorized_removal":
+        st.success(f"Authorized removal recognized — {removed}")
+    elif event_type == "inventory_recovered":
+        st.info(f"Inventory returned during verification — {removed}")
+    elif event_type == "unattributed_inventory_change":
+        st.warning(
+            "Inventory removal recognized, but no nearby person was observed — "
+            f"{removed}"
         )
-    st.markdown(
-        f"""
-        <div style="
-            background: linear-gradient(135deg, rgba(239, 68, 68, 0.25), rgba(185, 28, 28, 0.35));
-            border: 2px solid #ef4444;
-            border-radius: 12px;
-            padding: 16px 20px;
-            margin-bottom: 20px;
-            box-shadow: 0 4px 15px rgba(239, 68, 68, 0.3);
-        ">
-            <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px;">
-                <span style="font-size: 24px;">🚨</span>
-                <span style="font-size: 18px; font-weight: 800; color: #fca5a5; letter-spacing: 0.5px;">SUSPECTED THEFT ALERT</span>
+    else:
+        return
+
+    if event_type != "inventory_recovered":
+        st.caption(
+            "This removal was recorded once and monitoring is now paused. "
+            "Choose how to continue in the sidebar."
+        )
+
+    actor = event.get("primary_actor")
+    if event.get("status") == "confirmed":
+        actor_str = ""
+        if actor:
+            actor_str = (
+                f"• Suspect: <strong>{actor.get('name', 'Unknown')}</strong> "
+                f"(Track #{actor.get('track_id')}, confidence "
+                f"{actor.get('association_score', 0):.2f})"
+            )
+        st.markdown(
+            f"""
+            <div style="
+                background: linear-gradient(135deg, rgba(239, 68, 68, 0.25), rgba(185, 28, 28, 0.35));
+                border: 2px solid #ef4444;
+                border-radius: 12px;
+                padding: 16px 20px;
+                margin-bottom: 20px;
+                box-shadow: 0 4px 15px rgba(239, 68, 68, 0.3);
+            ">
+                <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px;">
+                    <span style="font-size: 24px;">🚨</span>
+                    <span style="font-size: 18px; font-weight: 800; color: #fca5a5; letter-spacing: 0.5px;">SUSPECTED THEFT ALERT</span>
+                </div>
+                <div style="font-size: 15px; color: #ffffff; margin-bottom: 6px;">
+                    <strong>Missing Inventory:</strong> <span style="color: #fef08a; font-weight: 700; font-size: 16px;">{removed}</span>
+                </div>
+                <div style="font-size: 12px; color: #fca5a5;">
+                    Event ID: <strong>{event['event_id']}</strong> • {event['timestamp']} {actor_str}
+                    • Telegram: {event.get('telegram_status', 'pending')}
+                </div>
             </div>
-            <div style="font-size: 15px; color: #ffffff; margin-bottom: 6px;">
-                <strong>Missing Inventory:</strong> <span style="color: #fef08a; font-weight: 700; font-size: 16px;">{removed}</span>
-            </div>
-            <div style="font-size: 12px; color: #fca5a5;">
-                Event ID: <strong>{event['event_id']}</strong> • {event['timestamp']} {actor_str}
-                • Telegram: {event.get('telegram_status', 'pending')}
-            </div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
+            """,
+            unsafe_allow_html=True,
+        )
+    else:
+        st.caption(f"Event {event['event_id']} at {event['timestamp']}")
+        if actor:
+            st.caption(
+                f"Likely actor: {actor.get('name', 'Unknown')} "
+                f"(track {actor.get('track_id')}, score "
+                f"{actor.get('association_score', 0):.2f})"
+            )
 
     summary_status = event.get("summary_status")
     if summary_status == "completed" and event.get("ai_summary"):
@@ -78,8 +110,20 @@ def render_alert(snapshot: dict, controller) -> None:
             "AI incident report unavailable: "
             f"{event.get('summary_error') or 'unknown error'}"
         )
-    if event.get("video_path"):
+    if event.get("status") == "confirmed" and event.get("video_path"):
         st.video(event["video_path"])
-    if st.button("🚨 Acknowledge Alert & Stop Siren", type="primary", key="ack-alert", use_container_width=True):
+    if event.get("status") == "confirmed" and st.button(
+        "🚨 Acknowledge Alert & Stop Siren",
+        type="primary",
+        key="ack-alert",
+        use_container_width=True,
+    ):
         controller.acknowledge(event["event_id"])
         st.rerun()
+
+
+def _removed_summary(event: dict) -> str:
+    return ", ".join(
+        f"{name.replace('_', ' ').title()} ×{count}"
+        for name, count in sorted(event.get("removed_items", {}).items())
+    ) or "unknown protected item"

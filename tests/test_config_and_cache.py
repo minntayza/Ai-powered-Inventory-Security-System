@@ -1,9 +1,18 @@
+import os
+import tempfile
+from pathlib import Path
 from unittest import TestCase
+from unittest.mock import patch
 
 import numpy as np
 
 from src.module_b_vlm_layer.prompt_cache import PromptCache
-from src.utils.config_loader import ConfigError, _validate_inventory_policy, load_app_config
+from src.utils.config_loader import (
+    ConfigError,
+    _validate_inventory_policy,
+    load_app_config,
+    load_environment,
+)
 
 
 class ConfigurationTests(TestCase):
@@ -32,6 +41,24 @@ class ConfigurationTests(TestCase):
                     "inventory_policy": {"protected": ["person"], "contextual": []},
                 }
             )
+
+    def test_project_environment_file_is_loaded(self):
+        with tempfile.TemporaryDirectory() as directory:
+            env_path = Path(directory) / ".env"
+            env_path.write_text("INVENTORY_TEST_VALUE=from-file\n", encoding="utf-8")
+            with patch.dict(os.environ, {}, clear=True):
+                self.assertTrue(load_environment(env_path))
+                self.assertEqual(os.environ["INVENTORY_TEST_VALUE"], "from-file")
+
+    def test_process_environment_takes_precedence_over_file(self):
+        with tempfile.TemporaryDirectory() as directory:
+            env_path = Path(directory) / ".env"
+            env_path.write_text("INVENTORY_TEST_VALUE=from-file\n", encoding="utf-8")
+            with patch.dict(
+                os.environ, {"INVENTORY_TEST_VALUE": "from-process"}, clear=True
+            ):
+                load_environment(env_path)
+                self.assertEqual(os.environ["INVENTORY_TEST_VALUE"], "from-process")
 
 
 class PromptCacheTests(TestCase):

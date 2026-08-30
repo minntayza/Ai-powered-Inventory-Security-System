@@ -2,6 +2,7 @@ import tempfile
 import sqlite3
 import os
 import time
+from contextlib import closing
 from pathlib import Path
 from unittest import TestCase
 
@@ -77,7 +78,7 @@ class AuditLoggerTests(TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             database = root / "legacy.db"
-            with sqlite3.connect(database) as connection:
+            with closing(sqlite3.connect(database)) as connection, connection:
                 connection.execute(
                     """
                     CREATE TABLE events (

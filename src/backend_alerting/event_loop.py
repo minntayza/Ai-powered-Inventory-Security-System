@@ -46,6 +46,7 @@ class SystemController:
         self._engine_lock = threading.RLock()
         self._capture_lock = threading.RLock()
         self._monitoring_mode = "DISARMED"
+        self._monitoring_reason: Optional[str] = None
         self._source_type = "live"
         self._source_label = "Live camera"
         self._source_generation = 0
@@ -87,6 +88,9 @@ class SystemController:
             enabled=bool(telegram.get("enabled", False)),
             timeout_seconds=float(telegram.get("timeout_seconds", 10)),
             max_attempts=int(telegram.get("max_attempts", 2)),
+            notify_event_types=telegram.get(
+                "notify_event_types", ["authorized_removal", "suspected_theft"]
+            ),
         )
         self._thread: Optional[threading.Thread] = None
         self._stop = threading.Event()
@@ -155,7 +159,7 @@ class SystemController:
             contextual_classes=contextual,
             shelf_region=self._shelf_region,
             interaction_associator=InteractionAssociator(
-                lookback_seconds=float(association.get("lookback_seconds", 2.0)),
+                lookback_seconds=float(association.get("lookback_seconds", 10.0)),
                 person_bbox_expansion=float(association.get("person_bbox_expansion", 0.15)),
                 minimum_score=float(association.get("minimum_score", 0.35)),
                 ambiguity_margin=float(association.get("ambiguity_margin", 0.10)),
@@ -243,10 +247,16 @@ class SystemController:
                 event = decision.get("new_event")
                 if event:
                     event["source_type"] = self._source_type
-                    if self._source_type == "replay":
-                        event["telegram_status"] = "disabled"
                     confirmed = event["status"] == "confirmed"
-                    record = self.audit.log_event(event, annotated if confirmed else None)
+                    notify_telegram = (
+                        self._source_type == "live" and self.telegram.should_notify(event)
+                    )
+                    event["telegram_status"] = (
+                        "pending" if notify_telegram else "disabled"
+                    )
+                    record = self.audit.log_event(
+                        event, annotated if confirmed or notify_telegram else None
+                    )
                     if confirmed and self._incident_summarizer is not None:
                         record.update(
                             summary_status="pending",
@@ -264,12 +274,24 @@ class SystemController:
                         self.incident_recorder.start_event(record["event_id"])
                         if self._source_type == "live":
                             self.siren.start()
-                            threading.Thread(
-                                target=self._notify,
-                                args=(deepcopy(record),),
-                                name=f"telegram-{record['event_id'][:8]}",
-                                daemon=True,
-                            ).start()
+                    if notify_telegram:
+                        threading.Thread(
+                            target=self._notify,
+                            args=(deepcopy(record),),
+                            name=f"telegram-{record['event_id'][:8]}",
+                            daemon=True,
+                        ).start()
+                    if event["event_type"] != "inventory_recovered":
+                        # A fixed baseline discrepancy is one incident. Stop
+                        # evaluating it after the first resolved decision so
+                        # count flicker or an expiring face cache cannot turn an
+                        # authorized removal into a later theft alert.
+                        self._monitoring_mode = "PAUSED"
+                        self._monitoring_reason = "event_recorded"
+                        counter = self._inventory_counter()
+                        if counter is not None and hasattr(counter, "disarm"):
+                            counter.disarm()
+                        monitoring = self._monitoring_snapshot(perception)
                 self._collect_completed_videos()
                 active_device = self.state.snapshot().get("device_info") or {}
                 yolo = getattr(self.tracker, "yolo_detector", None)
@@ -476,18 +498,37 @@ class SystemController:
                     "ok": False,
                     "message": "Wait for stable protected inventory inside the zone",
                 }
+            # Setup activity is not incident evidence. Attribution starts when
+            # the operator arms this baseline, so holding an item while arranging
+            # the scene cannot be reused as the actor for a later removal.
+            associator = getattr(self.tracker, "interaction_associator", None)
+            if associator is not None and hasattr(associator, "reset"):
+                associator.reset()
             self.theft_detector.reset()
             self._monitoring_mode = "ARMED"
+            self._monitoring_reason = None
             monitoring = self._monitoring_snapshot()
             self.state.update(monitoring=monitoring, security=self.theft_detector.snapshot())
             self.audit.log_operator_action(None, "set_baseline_and_arm")
-            return {"ok": True, "message": "Baseline set; monitoring armed"}
+            counts = monitoring.get("baseline_counts", {})
+            summary = ", ".join(
+                f"{count} {name.replace('_', ' ')}"
+                for name, count in sorted(counts.items())
+            )
+            return {
+                "ok": True,
+                "message": f"Baseline set ({summary}); monitoring armed",
+            }
 
     def pause_monitoring(self) -> Dict:
         with self._engine_lock:
             if self._monitoring_mode != "ARMED":
                 return {"ok": False, "message": "Monitoring is not armed"}
             self._monitoring_mode = "PAUSED"
+            self._monitoring_reason = "operator"
+            counter = self._inventory_counter()
+            if counter is not None and hasattr(counter, "disarm"):
+                counter.disarm()
             self.theft_detector.reset()
             self.state.update(monitoring=self._monitoring_snapshot(), security=self.theft_detector.snapshot())
             self.audit.log_operator_action(None, "pause_monitoring")
@@ -505,6 +546,7 @@ class SystemController:
                 }
             self.theft_detector.reset()
             self._monitoring_mode = "ARMED"
+            self._monitoring_reason = None
             self.state.update(monitoring=self._monitoring_snapshot(), security=self.theft_detector.snapshot())
             self.audit.log_operator_action(None, "resume_monitoring")
             return {"ok": True, "message": "Monitoring resumed"}
@@ -516,6 +558,7 @@ class SystemController:
                 counter.reset_baseline(clear_observations=True)
             self.theft_detector.reset()
             self._monitoring_mode = "DISARMED"
+            self._monitoring_reason = None
             self.state.update(monitoring=self._monitoring_snapshot(), security=self.theft_detector.snapshot())
             self.audit.log_operator_action(None, "reset_baseline")
             return {"ok": True, "message": "Baseline cleared; monitoring disarmed"}
@@ -573,8 +616,11 @@ class SystemController:
             self.theft_detector.reset()
             self.siren.stop()
             self._monitoring_mode = "DISARMED"
+            self._monitoring_reason = None
             self.state.update(
                 source={"type": source_type, "label": label},
+                frame=None,
+                perception=None,
                 monitoring=self._monitoring_snapshot(),
                 security=self.theft_detector.snapshot(),
             )
@@ -602,6 +648,7 @@ class SystemController:
             inventory = counter.snapshot() if counter is not None else {}
         return {
             "mode": self._monitoring_mode,
+            "pause_reason": self._monitoring_reason,
             "baseline_ready": bool(inventory.get("baseline_ready")),
             "baseline_counts": deepcopy(inventory.get("baseline_counts", {})),
             "current_counts": deepcopy(inventory.get("stable_counts", {})),
@@ -643,6 +690,28 @@ class SystemController:
 
     def snapshot(self) -> Dict:
         return self.state.snapshot()
+
+    def camera_preview(self) -> Dict:
+        """Overlay the latest AI result on the newest frame without blocking inference."""
+        with self._capture_lock:
+            healthy, frame, frame_id = self.capture.read()
+        perception = self.state.perception_snapshot()
+        has_detection_overlay = False
+        if frame is not None and perception and self.tracker is not None:
+            try:
+                frame = self.tracker.draw_tracking(frame, perception)
+                has_detection_overlay = True
+            except (KeyError, TypeError, ValueError):
+                # A source switch can briefly pair a new frame with an old or
+                # incomplete perception snapshot. The next refresh will retry.
+                pass
+        return {
+            "frame": frame,
+            "frame_id": frame_id,
+            "camera_healthy": healthy,
+            "raw_preview": True,
+            "has_detection_overlay": has_detection_overlay,
+        }
 
     def stop(self) -> None:
         self._stop.set()

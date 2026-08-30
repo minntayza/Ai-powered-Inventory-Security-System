@@ -34,6 +34,14 @@ class TheftDetector:
         change = inventory.get("change")
         drop = inventory.get("drop")
 
+        # Stable inventory counting intentionally delays a removal decision to
+        # reject one-frame YOLO misses.  The person who handled the item can
+        # leave the frame during that delay, so seed the grace buffer with the
+        # pre-drop people retained by the interaction associator.  Current
+        # observations win when the same track is still visible.
+        if drop:
+            persons = self._merge_associated_persons(drop, persons)
+
         if self.state == "COOLDOWN":
             if now >= self.cooldown_until:
                 self.state = "NORMAL"
@@ -116,6 +124,31 @@ class TheftDetector:
         return relevant
 
     @staticmethod
+    def _merge_associated_persons(drop: Dict, persons: List[Dict]) -> List[Dict]:
+        """Merge retained interaction evidence with people visible at decision time."""
+        by_track: Dict[int, Dict] = {}
+        for association in drop.get("associations", []):
+            candidates = association.get("actor_candidates", [])
+            if not candidates and association.get("primary_actor"):
+                candidates = [association["primary_actor"]]
+            for candidate in candidates:
+                track_id = candidate.get("track_id", candidate.get("id"))
+                if track_id is None:
+                    continue
+                normalized = int(track_id)
+                by_track[normalized] = {
+                    **deepcopy(candidate),
+                    "id": normalized,
+                    "track_id": normalized,
+                }
+        for person in persons:
+            track_id = person.get("track_id", person.get("id"))
+            if track_id is None:
+                continue
+            by_track[int(track_id)] = deepcopy(person)
+        return list(by_track.values())
+
+    @staticmethod
     def _inventory_recovered(change: Optional[Dict]) -> bool:
         return bool(change and change.get("added_items"))
 
@@ -144,6 +177,17 @@ class TheftDetector:
             candidates.extend(association.get("actor_candidates", []))
             if primary_actor is None and association.get("primary_actor"):
                 primary_actor = association["primary_actor"]
+        if primary_actor:
+            actor_track = primary_actor.get("track_id", primary_actor.get("id"))
+            current_actor = next(
+                (
+                    person for person in persons
+                    if person.get("track_id", person.get("id")) == actor_track
+                ),
+                None,
+            )
+            if current_actor:
+                primary_actor = {**primary_actor, **current_actor}
         reasons = {
             "suspected_theft": "protected_item_removed_with_unauthorized_or_unknown_person",
             "authorized_removal": "all_relevant_people_authorized",

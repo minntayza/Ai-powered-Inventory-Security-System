@@ -21,7 +21,11 @@ from src.module_b_vlm_layer.voice_input import VoiceQuestionTranscriber
 
 from src.module_c_ui_dashboard.alert_ui import render_alert
 from src.module_c_ui_dashboard.cognitive_assistant import render_assistant
-from src.module_c_ui_dashboard.operational_view import render_operational_view
+from src.module_c_ui_dashboard.operational_view import (
+    render_live_frame,
+    render_operational_details,
+    render_operational_status,
+)
 
 
 st.set_page_config(page_title="Inventory Security", page_icon="🛡️", layout="wide")
@@ -79,7 +83,13 @@ with st.sidebar:
     monitoring = controller.snapshot().get("monitoring", {})
     mode = monitoring.get("mode", "DISARMED")
     st.caption(f"Status: **{mode}**")
+    current_counts = monitoring.get("current_counts", {})
+    st.caption(f"Stable protected count: {current_counts or 'not ready'}")
     if mode == "DISARMED":
+        st.info(
+            "1. Put the protected items inside the monitored zone. "
+            "2. Stop handling them and step away. 3. Wait for the count to settle."
+        )
         if st.button(
             "🛡️ Set baseline and arm",
             use_container_width=True,
@@ -93,16 +103,34 @@ with st.sidebar:
                 "You may click the button to re-check readiness."
             )
     elif mode == "ARMED":
+        st.success(
+            "Monitoring is armed. The next stable removal creates one event, "
+            "then monitoring pauses automatically."
+        )
         if st.button("⏸️ Pause monitoring", use_container_width=True):
             result = controller.pause_monitoring()
             (st.success if result["ok"] else st.warning)(result["message"])
             st.rerun()
+    elif monitoring.get("pause_reason") == "event_recorded":
+        st.warning(
+            "A removal was recorded and this baseline is paused. This prevents "
+            "the same missing item from later becoming a second, contradictory alert."
+        )
+        if st.button("Item returned — resume original baseline", use_container_width=True):
+            result = controller.resume_monitoring()
+            (st.success if result["ok"] else st.warning)(result["message"])
+            st.rerun()
+        if st.button("Use current count as the new baseline", use_container_width=True):
+            result = controller.set_baseline_and_arm()
+            (st.success if result["ok"] else st.warning)(result["message"])
+            st.rerun()
     else:
+        st.info("Monitoring was paused manually; perception is still running.")
         if st.button("▶️ Resume monitoring", use_container_width=True):
             result = controller.resume_monitoring()
             (st.success if result["ok"] else st.warning)(result["message"])
             st.rerun()
-    if st.button("🔄 Reset baseline", use_container_width=True):
+    if st.button("🔄 Clear baseline and start over", use_container_width=True):
         result = controller.reset_baseline()
         st.success(result["message"])
         st.rerun()
@@ -194,25 +222,52 @@ with st.sidebar:
                 (st.success if result["ok"] else st.error)(result["message"])
                 if result["ok"]:
                     st.rerun()
-    st.caption("Telegram Notifications: " + ("🟢 Enabled" if controller.telegram.enabled else "🔴 Disabled"))
+    if controller.telegram.enabled and controller.telegram.configured:
+        st.caption("Telegram: ready for authorized removal and suspected theft")
+    elif controller.telegram.enabled:
+        st.warning(
+            "Telegram routing is enabled, but TELEGRAM_BOT_TOKEN and "
+            "TELEGRAM_CHAT_ID are not available to this process."
+        )
+    else:
+        st.caption("Telegram: disabled")
 
 left, right = st.columns([3, 2])
 with left:
     @st.fragment(run_every=0.5)
-    def live_operational_panel() -> None:
+    def operational_status_panel() -> None:
         current = controller.snapshot()
         render_alert(current, controller)
-        render_operational_view(current)
+        render_operational_status(current)
 
-    live_operational_panel()
+    operational_status_panel()
+
+    camera_fps = max(1.0, float(controller.config["camera"].get("fps", 10)))
+
+    @st.fragment(run_every=max(0.05, 1.0 / camera_fps))
+    def live_camera_panel() -> None:
+        render_live_frame(controller.camera_preview())
+
+    live_camera_panel()
+
+    @st.fragment(run_every=0.5)
+    def operational_details_panel() -> None:
+        render_operational_details(controller.snapshot())
+
+    operational_details_panel()
 with right:
     render_assistant(controller, vqa, tts, voice)
-    st.markdown("### 📋 Recent Activity Logs")
-    events = controller.recent_events(20)
-    if events:
-        st.dataframe(events, hide_index=True, use_container_width=True)
-    else:
-        st.caption("No security events recorded yet")
+
+    @st.fragment(run_every=0.5)
+    def recent_activity_panel() -> None:
+        st.markdown("### 📋 Recent Activity Logs")
+        events = controller.recent_events(20)
+        if events:
+            st.dataframe(events, hide_index=True, use_container_width=True)
+        else:
+            st.caption("No security events recorded yet")
+
+    recent_activity_panel()
 
 if st.button("🔄 Refresh Dashboard", use_container_width=True):
     st.rerun()

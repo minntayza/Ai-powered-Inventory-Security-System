@@ -78,6 +78,67 @@ class TheftDetectorTests(TestCase):
         self.assertEqual(result["state"], "CANCELLED")
         self.assertEqual(result["new_event"]["event_type"], "unattributed_inventory_change")
 
+    def test_retained_drop_association_attributes_person_who_left_frame(self):
+        associated_drop = {
+            **DROP,
+            "associations": [{
+                "item_track_id": 9,
+                "label": "bottle",
+                "primary_actor": {
+                    "track_id": 4,
+                    "name": "Unknown",
+                    "authorization_state": "unknown",
+                    "association_score": 0.8,
+                },
+                "actor_candidates": [{
+                    "track_id": 4,
+                    "name": "Unknown",
+                    "authorization_state": "unknown",
+                    "association_score": 0.8,
+                }],
+            }],
+        }
+        first = self.detector.evaluate(
+            perception(drop=associated_drop, change=associated_drop), now=0
+        )
+        self.assertEqual(first["state"], "PENDING")
+
+        result = self.detector.evaluate(perception(), now=3.1)
+
+        self.assertEqual(result["state"], "CONFIRMED")
+        event = result["new_event"]
+        self.assertEqual(event["event_type"], "suspected_theft")
+        self.assertEqual(event["person_track_ids"], [4])
+        self.assertEqual(event["primary_actor"]["track_id"], 4)
+
+    def test_current_identity_refreshes_retained_primary_actor(self):
+        associated_drop = {
+            **DROP,
+            "associations": [{
+                "primary_actor": {
+                    "track_id": 2,
+                    "name": "Unknown",
+                    "authorization_state": "not_visible",
+                    "association_score": 0.9,
+                },
+                "actor_candidates": [],
+            }],
+        }
+        current = [{
+            "track_id": 2,
+            "name": "Alice",
+            "authorization_state": "authorized",
+        }]
+
+        result = self.detector.evaluate(
+            perception(current, associated_drop, associated_drop), now=0
+        )
+
+        event = result["new_event"]
+        self.assertEqual(event["event_type"], "authorized_removal")
+        self.assertEqual(event["primary_actor"]["name"], "Alice")
+        self.assertEqual(event["primary_actor"]["authorization_state"], "authorized")
+
     def test_confirmed_event_enters_cooldown(self):
         self.detector.evaluate(perception(self.unknown, DROP, DROP), now=0)
         self.detector.evaluate(perception(self.unknown), now=3.1)

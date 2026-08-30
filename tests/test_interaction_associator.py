@@ -31,3 +31,20 @@ class InteractionAssociatorTests(TestCase):
         )
         self.assertTrue(result[0]["ambiguous"])
         self.assertIsNone(result[0]["primary_actor"])
+
+    def test_history_survives_inventory_stabilization_delay(self):
+        associator = InteractionAssociator(lookback_seconds=10, minimum_score=0.35)
+        item = {"label": "bottle", "bbox": [40, 40, 60, 60], "track_id": 9}
+        person = {
+            "bbox": [20, 10, 80, 100], "track_id": 3, "name": "Unknown",
+            "authorization_state": "unknown",
+        }
+        associator.observe([item], [person], [100, 100], now=1)
+
+        result = associator.observe(
+            [], [], [100, 100],
+            drop={"removed_items": {"bottle": 1}}, now=7,
+        )
+
+        self.assertEqual(result[0]["item_track_id"], 9)
+        self.assertEqual(result[0]["primary_actor"]["track_id"], 3)

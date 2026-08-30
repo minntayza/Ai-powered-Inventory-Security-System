@@ -6,6 +6,9 @@ telegram:
   enabled: true
   timeout_seconds: 10
   max_attempts: 2
+  notify_event_types:
+    - authorized_removal
+    - suspected_theft
 
 storage:
   database_path: "data/logs/security_events.db"

@@ -57,9 +57,12 @@ def status_badge(label: str, healthy: bool) -> None:
 
 
 
-def inventory_metrics(counts: Dict[str, int]) -> None:
+def inventory_metrics(
+    counts: Dict[str, int],
+    empty_message: str = "No protected inventory is currently detected.",
+) -> None:
     if not counts:
-        st.info("Waiting for a stable inventory baseline…")
+        st.info(empty_message)
         return
     columns = st.columns(min(len(counts), 4))
     for index, (label, count) in enumerate(sorted(counts.items())):
@@ -72,11 +75,19 @@ def authorization_table(persons: list[Dict]) -> None:
     if not persons:
         st.caption("No people detected in camera view")
         return
+    state_labels = {
+        "authorized": "Authorized",
+        "unknown": "Unknown / not authorized",
+        "not_visible": "Face not verified",
+    }
     rows = [
         {
             "Track": f"#{person.get('track_id', person.get('id'))}",
             "Identity": person.get("name", "Unknown"),
-            "State": person.get("authorization_state", "not_visible"),
+            "State": state_labels.get(
+                person.get("authorization_state", "not_visible"),
+                person.get("authorization_state", "not_visible"),
+            ),
             "Confidence": round(float(person.get("face_confidence", 0)), 3),
         }
         for person in persons

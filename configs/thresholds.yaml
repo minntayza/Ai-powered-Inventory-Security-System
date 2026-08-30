@@ -19,22 +19,31 @@ person_tracking:
   grace_period_seconds: 3
   min_face_size: 50
   face_interval_frames: 10
-  authorization_cache_seconds: 8
+  # Keep authorization through a brief head turn, but expire old face evidence
+  # quickly enough that a later removal is not authorized from a stale sighting.
+  authorization_cache_seconds: 4
   track_expiry_seconds: 5
 
 inventory:
-  window_size: 15
-  confirmation_frames: 5
-  warmup_frames: 15
+  # Fast live-demo profile: a new count wins after four frames in a full
+  # window, then needs one additional matching frame before it is committed.
+  # This still rejects isolated YOLO misses without making removals feel stuck.
+  window_size: 7
+  confirmation_frames: 2
+  warmup_frames: 7
 
 association:
-  lookback_seconds: 2.0
+  # Must outlive inventory stabilization so the item/person evidence is still
+  # available after a removed object has disappeared from the camera.
+  lookback_seconds: 10.0
   person_bbox_expansion: 0.15
   minimum_score: 0.35
   ambiguity_margin: 0.10
 
 security:
-  grace_period_seconds: 8
+  # Allow a late face result or quick item return, but do not hold a confirmed
+  # unknown-person removal for the previous eight-second delay.
+  grace_period_seconds: 3
   alert_cooldown_seconds: 30
   # Optional normalized [x1, y1, x2, y2]. Null treats the full frame as monitored.
   shelf_region: null

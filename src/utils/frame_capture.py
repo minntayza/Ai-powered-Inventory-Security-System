@@ -48,6 +48,10 @@ class FrameCapture:
     def _open(self) -> bool:
         self._release()
         capture = cv2.VideoCapture(self.source)
+        # Keep live sources responsive when inference briefly falls behind.
+        # Backends that support this retain the newest frame instead of
+        # making the UI work through an old camera-frame backlog.
+        capture.set(cv2.CAP_PROP_BUFFERSIZE, 1)
         capture.set(cv2.CAP_PROP_FRAME_WIDTH, self.width)
         capture.set(cv2.CAP_PROP_FRAME_HEIGHT, self.height)
         capture.set(cv2.CAP_PROP_FPS, self.fps)

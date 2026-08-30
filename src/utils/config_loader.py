@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any, Dict, Iterable
 
 import yaml
+from dotenv import load_dotenv
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -14,6 +15,12 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 class ConfigError(ValueError):
     """Raised when application configuration is missing or malformed."""
+
+
+def load_environment(path: str | Path | None = None) -> bool:
+    """Load project-local environment values without overriding the process."""
+    env_path = resolve_project_path(path or ".env")
+    return load_dotenv(dotenv_path=env_path, override=False)
 
 
 def resolve_project_path(value: str | Path) -> Path:
@@ -56,6 +63,7 @@ def deep_merge(base: Dict[str, Any], override: Dict[str, Any]) -> Dict[str, Any]
 
 def load_app_config(config_dir: str | Path = "configs") -> Dict[str, Any]:
     """Load all application configuration files into one mapping."""
+    load_environment()
     directory = resolve_project_path(config_dir)
     config = {
         "camera": load_yaml(directory / "camera_config.yaml"),

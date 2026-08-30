@@ -13,7 +13,7 @@ class InteractionAssociator:
 
     def __init__(
         self,
-        lookback_seconds: float = 2.0,
+        lookback_seconds: float = 10.0,
         person_bbox_expansion: float = 0.15,
         minimum_score: float = 0.35,
         ambiguity_margin: float = 0.10,

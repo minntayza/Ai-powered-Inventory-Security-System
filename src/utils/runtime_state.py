@@ -44,3 +44,8 @@ class RuntimeState:
             for key in ("perception", "security", "monitoring", "source", "performance"):
                 result[key] = deepcopy(self._state[key])
             return result
+
+    def perception_snapshot(self) -> Any:
+        """Copy perception metadata without also copying the stored video frame."""
+        with self._lock:
+            return deepcopy(self._state["perception"])

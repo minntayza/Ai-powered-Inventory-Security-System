@@ -85,7 +85,7 @@ def render_inventory_status(current_counts: dict, baseline_counts: dict) -> None
     )
 
 
-def render_operational_view(snapshot: dict) -> None:
+def render_operational_status(snapshot: dict) -> None:
     if snapshot.get("source", {}).get("type") == "replay":
         st.warning("⚠️ SIMULATION MODE — siren and Telegram notifications are disabled.")
     status_columns = st.columns(4)
@@ -107,11 +107,28 @@ def render_operational_view(snapshot: dict) -> None:
     monitoring = snapshot.get("monitoring", {})
     mode = monitoring.get("mode", "DISARMED")
     if mode == "DISARMED":
-        st.warning("🔒 **Monitoring is DISARMED.** Arrange protected items in camera view, then click **Set baseline and arm**.")
+        st.warning(
+            "🔒 **STEP 1 — Monitoring is DISARMED.** Place items in the monitored zone, stop handling them, "
+            "wait for a stable count, then set the baseline."
+        )
     elif mode == "PAUSED":
-        st.info("⏸️ **Monitoring is PAUSED.** Perception continues but alert triggers are suppressed.")
+        if monitoring.get("pause_reason") == "event_recorded":
+            st.warning(
+                "STEP 3 — One removal event was recorded. Monitoring is paused "
+                "until you return the item or accept a new baseline."
+            )
+        else:
+            st.info("Monitoring is paused manually; perception continues without alerts.")
     else:
-        st.success("🛡️ **Monitoring is ARMED.** Inventory counts are actively benchmarked against baseline.")
+        st.success(
+            "🛡️ **STEP 2 — Monitoring is ARMED.** A stable removal will be classified once."
+        )
+        if monitoring.get("shelf_region") is None:
+            st.warning(
+                "The full camera frame is the monitored zone. An item carried in view "
+                "still counts as inventory; set the zone around the shelf or desk to "
+                "detect pickup as soon as the item leaves that area."
+            )
 
     device = snapshot.get("device_info") or {}
     if device:
@@ -119,6 +136,18 @@ def render_operational_view(snapshot: dict) -> None:
     for message in component_health_messages(snapshot.get("component_health") or {}):
         st.error(message)
 
+
+
+def render_live_frame(snapshot: dict) -> None:
+    """Render only video so it can refresh without rebuilding every widget."""
+    if snapshot.get("raw_preview"):
+        if snapshot.get("has_detection_overlay"):
+            st.caption(
+                "Smooth live preview — boxes show the latest AI detections and "
+                "update at the processed-frame rate."
+            )
+        else:
+            st.caption("Smooth live preview — waiting for the first AI detections.")
     frame = snapshot.get("frame")
     if frame is not None:
         frame_uri = encode_frame_data_uri(frame)
@@ -130,6 +159,11 @@ def render_operational_view(snapshot: dict) -> None:
     else:
         st.warning("📷 Waiting for live camera feed…")
 
+
+
+def render_operational_details(snapshot: dict) -> None:
+    monitoring = snapshot.get("monitoring", {})
+    mode = monitoring.get("mode", "DISARMED")
     perception = snapshot.get("perception") or {}
     inventory = perception.get("inventory", {})
     st.markdown("### 📦 Protected Inventory")
@@ -149,6 +183,26 @@ def render_operational_view(snapshot: dict) -> None:
         )
         st.caption(f"🎯 **Armed Baseline:** {items_str}")
         render_inventory_status(protected_counts, baseline)
+        missing = monitoring.get("missing_items", {})
+        if missing:
+            detail = ", ".join(
+                f"{label.replace('_', ' ').title()} ×{count}"
+                for label, count in sorted(missing.items())
+            )
+            st.warning(f"Missing from armed baseline: {detail}")
+        elif mode == "ARMED":
+            raw_counts = inventory.get("raw_counts", {})
+            possible_missing = {
+                label: count - raw_counts.get(label, 0)
+                for label, count in baseline.items()
+                if count > raw_counts.get(label, 0)
+            }
+            if possible_missing:
+                detail = ", ".join(
+                    f"{label.replace('_', ' ').title()} ×{count}"
+                    for label, count in sorted(possible_missing.items())
+                )
+                st.info(f"Verifying possible removal: {detail}")
     st.markdown("### 👥 Tracked Personnel & Authorization")
     authorization_table(perception.get("persons", []))
 
@@ -170,3 +224,10 @@ def render_operational_view(snapshot: dict) -> None:
             )
     if snapshot.get("last_error"):
         st.error(snapshot["last_error"])
+
+
+def render_operational_view(snapshot: dict) -> None:
+    """Backward-compatible combined operational view."""
+    render_operational_status(snapshot)
+    render_live_frame(snapshot)
+    render_operational_details(snapshot)

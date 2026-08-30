@@ -2,10 +2,87 @@
 
 from __future__ import annotations
 
+import base64
+
 import cv2
 import streamlit as st
 
 from .components import authorization_table, inventory_metrics, status_badge
+
+
+def encode_frame_data_uri(frame) -> str:
+    encoded, jpeg = cv2.imencode(".jpg", frame)
+    if not encoded:
+        raise ValueError("Could not encode the live camera frame")
+    payload = base64.b64encode(jpeg).decode("ascii")
+    return f"data:image/jpeg;base64,{payload}"
+
+
+def format_device_status(device: dict) -> str:
+    """Format accelerator and memory health for the operator."""
+    selected = str(device.get("selected", "cpu"))
+    if selected.startswith("cuda"):
+        memory = device.get("memory") or {}
+        if memory:
+            status = (
+                f"Inference: {selected} — {device.get('gpu_name')} "
+                f"({memory.get('reserved_gb', 0)}/{memory.get('total_gb', 0)} GB reserved)"
+            )
+            if memory.get("pressure") == "high":
+                status += " — HIGH MEMORY PRESSURE"
+            return status
+        return (
+            f"Inference: {selected} — {device.get('gpu_name')} "
+            f"({device.get('gpu_memory_gb')} GB)"
+        )
+    if selected == "mps":
+        return "Inference: mps — Apple Silicon GPU (Metal Performance Shaders)"
+    return "Inference: CPU fallback — no supported GPU accelerator is available"
+
+
+def component_health_messages(component_health: dict) -> list[str]:
+    """Return operator-facing messages for degraded perception components."""
+    messages = []
+    face = component_health.get("face") or {}
+    if face and not face.get("healthy", True):
+        messages.append(
+            f"Face recognition degraded: {face.get('last_error') or 'unknown error'}"
+        )
+    return messages
+
+
+def inventory_status_rows(current_counts: dict, baseline_counts: dict) -> list[dict]:
+    """Build explicit operator-facing inventory statuses against the armed baseline."""
+    rows = []
+    for label in sorted(set(current_counts) | set(baseline_counts)):
+        current = int(current_counts.get(label, 0))
+        baseline = int(baseline_counts.get(label, 0))
+        difference = current - baseline
+        if difference < 0:
+            status = f"Missing ({abs(difference)})"
+        elif difference > 0:
+            status = f"Discrepancy (+{difference})"
+        else:
+            status = "Present"
+        rows.append(
+            {
+                "Item": label.replace("_", " ").title(),
+                "Current": current,
+                "Baseline": baseline,
+                "Difference": difference,
+                "Status": status,
+            }
+        )
+    return rows
+
+
+def render_inventory_status(current_counts: dict, baseline_counts: dict) -> None:
+    """Render the current, baseline, and discrepancy state of every protected item."""
+    st.dataframe(
+        inventory_status_rows(current_counts, baseline_counts),
+        hide_index=True,
+        use_container_width=True,
+    )
 
 
 def render_operational_view(snapshot: dict) -> None:
@@ -38,36 +115,40 @@ def render_operational_view(snapshot: dict) -> None:
 
     device = snapshot.get("device_info") or {}
     if device:
-        if str(device.get("selected", "cpu")).startswith("cuda"):
-            st.caption(
-                f"⚡ **Inference Accelerator:** {device['selected']} — {device.get('gpu_name')} "
-                f"({device.get('gpu_memory_gb')} GB)"
-            )
-        elif device.get("selected") == "mps":
-            st.caption("⚡ **Inference Accelerator:** Apple Silicon GPU (MPS)")
-        else:
-            st.caption("💻 **Inference Accelerator:** CPU Mode (No active CUDA GPU)")
+        st.caption(f"⚡ **Inference Accelerator:** {format_device_status(device)}")
+    for message in component_health_messages(snapshot.get("component_health") or {}):
+        st.error(message)
 
     frame = snapshot.get("frame")
     if frame is not None:
-        st.image(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB), channels="RGB", use_container_width=True)
+        frame_uri = encode_frame_data_uri(frame)
+        st.markdown(
+            f'<img src="{frame_uri}" alt="Live camera frame" '
+            'style="display:block;width:100%;height:auto">',
+            unsafe_allow_html=True,
+        )
     else:
         st.warning("📷 Waiting for live camera feed…")
 
     perception = snapshot.get("perception") or {}
     inventory = perception.get("inventory", {})
-
     st.markdown("### 📦 Protected Inventory")
-    inventory_metrics(inventory.get("protected_counts", inventory.get("stable_counts", {})))
+    protected_counts = inventory.get(
+        "protected_counts", inventory.get("stable_counts", {})
+    )
+    inventory_metrics(protected_counts)
     context = inventory.get("contextual_counts", {})
     if context:
         with st.expander("Context Objects (Non-triggering background objects)"):
             inventory_metrics(context)
     baseline = monitoring.get("baseline_counts", {})
     if baseline:
-        items_str = ", ".join(f"**{k.replace('_', ' ').title()}**: {v}" for k, v in baseline.items())
+        items_str = ", ".join(
+            f"**{key.replace('_', ' ').title()}**: {value}"
+            for key, value in baseline.items()
+        )
         st.caption(f"🎯 **Armed Baseline:** {items_str}")
-
+        render_inventory_status(protected_counts, baseline)
     st.markdown("### 👥 Tracked Personnel & Authorization")
     authorization_table(perception.get("persons", []))
 
@@ -89,4 +170,3 @@ def render_operational_view(snapshot: dict) -> None:
             )
     if snapshot.get("last_error"):
         st.error(snapshot["last_error"])
-

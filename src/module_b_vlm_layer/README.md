@@ -15,6 +15,7 @@ src/module_b_vlm_layer/
 | `vqa_pipeline.py` | Visual Question Answering: accept cropped frame + text prompt, return text answer |
 | `tts_engine.py` | pyttsx3 Text-to-Speech: convert VLM text responses to spoken audio |
 | `prompt_cache.py` | Prompt caching and frame-skipping logic to optimize inference latency |
+| `voice_input.py` | Local Whisper speech-to-text with microphone/siren coordination |
 
 ## Key Integration Points
 
@@ -39,3 +40,4 @@ src/module_b_vlm_layer/
 - Target model: Florence-2 or Moondream2 (lightweight, edge-deployable)
 - Must run concurrently with YOLOv8 on same GPU without OOM errors
 - Coordinate with Hardware Specialist on GPU memory allocation
+- The first voice request may download `openai/whisper-tiny.en`; transcription failures remain isolated from monitoring

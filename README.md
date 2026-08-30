@@ -77,8 +77,10 @@ this repository is inside OneDrive, so review synchronization/privacy settings.
 streamlit run src/module_c_ui_dashboard/app.py
 ```
 
-The first YOLO/DeepFace/Florence execution may download model weights. Florence-2
-loads only after the first visual question, so monitoring can run without it.
+The first YOLO/DeepFace/Florence/Whisper execution may download model weights.
+Florence-2 loads only after the first visual question and the local Whisper tiny
+English model loads only after the first voice recording, so monitoring can run
+without either feature.
 Florence uses its supported detailed-caption task for scene/action questions and
 its OCR task for questions about visible text; it is not treated as a chat model.
 
@@ -112,6 +114,17 @@ Confirmed live incidents retain an image and bounded pre/post-event video when
 OpenCV encoding is available. Default media retention is 30 days. See
 `docs/CLASSROOM_DEMO_FEATURE_IMPLEMENTATION_PLAN.md` for the architecture,
 contracts, test matrix, and complete demonstration workflow.
+
+While the dashboard is running, each confirmed incident also schedules a
+Florence-2 report in the background. Its pending/completed/failed status and
+human-readable result are stored with the SQLite event and shown in the alert and
+recent-activity data. The report is descriptive only and never changes the
+deterministic security decision. The first report may take longer while Florence
+loads or downloads its model weights.
+
+Hardware preparation is documented under `hardware_setup/`. Automated evidence
+and the still-required physical exhibition checks are tracked in
+`docs/QA_VALIDATION_RESULTS.md`.
 
 Run the engine without the dashboard with:
 

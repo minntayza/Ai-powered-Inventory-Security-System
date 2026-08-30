@@ -7,14 +7,16 @@
 hardware_setup/
 ```
 
-## Files to Create
+## Setup guides
 
 | File | Purpose |
 |---|---|
-| `cuda_setup_guide.md` | Step-by-step NVIDIA/CUDA driver installation and verification for Lenovo Legion 5 |
-| `camera_setup_guide.md` | DroidCam/Iriun smartphone IP camera configuration, stream URL, resolution settings |
+| `cuda_setup_guide.md` | NVIDIA/PyTorch installation, verification, fallback, and thermal rehearsal |
+| `camera_setup_guide.md` | USB and vendor-neutral smartphone/IP camera configuration |
 | `network_guide.md` | Local smartphone hotspot LAN setup, IP addressing, troubleshooting connection drops |
 | `face_database_specs.md` | Face photo collection guidelines, camera positioning, lighting requirements for enrollment |
+
+Use `docs/QA_VALIDATION_RESULTS.md` to record the final automated run and all tests performed on the physical exhibition equipment.
 
 ## Also Responsible For
 

@@ -3,11 +3,16 @@ import time
 from native_theft_engine import CoreTheftEngineNoPygame
 from day4_alerting import AlertingAndLoggingManager
 
-# Configuration
-BOT_TOKEN = "8877453484:AAFkBgSau29l6Hek5bESXnWh3f5hZwVswes"  
-CHAT_ID = "2029905108"      
+# Configuration is loaded at runtime so credentials never enter source control.
+BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
+CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "")
 
 def run_test():
+    if not BOT_TOKEN or not CHAT_ID:
+        raise RuntimeError(
+            "Set TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID before running this script."
+        )
+
     engine = CoreTheftEngineNoPygame(siren_sound_path="siren.mp3")
     manager = AlertingAndLoggingManager(bot_token=BOT_TOKEN, chat_id=CHAT_ID)
 

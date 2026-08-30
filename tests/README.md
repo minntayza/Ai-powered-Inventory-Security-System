@@ -7,16 +7,19 @@
 tests/
 ```
 
-## Files to Create
+## Test coverage
 
 | File | Purpose |
 |---|---|
-| `test_module_a.py` | Unit tests for Perception Engine (YOLO detection, face recognition, item counting) |
-| `test_module_b.py` | Unit tests for VLM Layer (VQA response format, TTS output, inference latency) |
-| `test_module_c.py` | Unit tests for UI Dashboard (widget rendering, alert state transitions) |
-| `test_backend.py` | Unit tests for Backend & Alerting (theft logic, Telegram payload, audit logging) |
-| `test_integration.py` | End-to-end pipeline test: Camera → YOLO/Face Recognition → Logic → Alert → UI |
-| `test_qa_scenarios.py` | Simulated incident scenarios: authorized user takes item vs. unauthorized intruder |
+Tests are split by public component instead of by team module. The suite includes perception/tracking, security policy, controller integration, camera recovery, incident recording, SQLite audit migration/retention, Telegram retry, siren/audio coordination, enrollment, dashboard rendering, VQA/TTS/voice input, and GPU health.
+
+Run every test with:
+
+```bash
+python -m pytest -q
+```
+
+See `docs/QA_VALIDATION_RESULTS.md` for the automated evidence summary and the separate physical-hardware checklist.
 
 ## Also Responsible For
 

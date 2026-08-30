@@ -82,5 +82,3 @@ def authorization_table(persons: list[Dict]) -> None:
         for person in persons
     ]
     st.dataframe(rows, hide_index=True, use_container_width=True)
-
-

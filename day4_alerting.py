@@ -16,7 +16,7 @@ class AlertingAndLoggingManager:
             with open(self.csv_filename, mode="w", newline="", encoding="utf-8") as f:
                 writer = csv.writer(f)
                 writer.writerow([
-                    "Timestamp", "Event Type", "Inventory Count", 
+                    "Timestamp", "Event Type", "Inventory Count",
                     "Person Detected", "ArUco Detected", "Details", "Image Path"
                 ])
 

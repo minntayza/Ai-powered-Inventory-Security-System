@@ -15,6 +15,30 @@ def encoded_image():
 
 
 class FaceEnrollmentTests(TestCase):
+    def test_enrollment_rejects_unsupported_image_type(self):
+        with tempfile.TemporaryDirectory() as directory:
+            service = FaceEnrollmentService(directory, validator=lambda _image: 1)
+
+            result = service.enroll("Demo User", [("face.gif", b"gif-data")])
+
+            self.assertEqual(
+                {"ok": result["ok"], "identities": service.identities()},
+                {"ok": False, "identities": {}},
+            )
+
+    def test_enrollment_rejects_unsafe_identity_name(self):
+        with tempfile.TemporaryDirectory() as directory:
+            service = FaceEnrollmentService(directory, validator=lambda _image: 1)
+
+            result = service.enroll(
+                "../outside", [("face.jpg", encoded_image())]
+            )
+
+            self.assertEqual(
+                {"ok": result["ok"], "identities": service.identities()},
+                {"ok": False, "identities": {}},
+            )
+
     def test_valid_upload_is_enrolled_atomically(self):
         with tempfile.TemporaryDirectory() as directory:
             service = FaceEnrollmentService(directory, validator=lambda _image: 1)

@@ -3,7 +3,7 @@ siren:
   audio_path: "assets/audio/siren.mp3"
 
 telegram:
-  enabled: false
+  enabled: true
   timeout_seconds: 10
   max_attempts: 2
 

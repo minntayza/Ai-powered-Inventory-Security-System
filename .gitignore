@@ -19,6 +19,7 @@ assets/known_faces/**/*.png
 
 *.env
 .env
+~$*.pptx
 secrets.yaml
 
 .ipynb_checkpoints

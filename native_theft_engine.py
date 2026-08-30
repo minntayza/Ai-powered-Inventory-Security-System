@@ -20,7 +20,7 @@ class CoreTheftEngineNoPygame:
         def _play_sound():
             abs_path = os.path.abspath(self.siren_sound_path)
             print(f"\n[AUDIO CHECK] Looking for sound file at: {abs_path}")
-            
+
             if os.path.exists(abs_path) and sys.platform == "win32":
                 print("🔊 [AUDIO STATUS] MP3 File found! Playing siren...")
                 try:
